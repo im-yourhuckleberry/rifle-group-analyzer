@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Analysis{% endblock %}
+{% block content %}
+<div data-page="analysis">
+  <h1>Analysis</h1>
+
+  <section class="card">
+    <h2>Aggregate groups</h2>
+    <p class="muted">Pick finalized groups of one rifle at one distance. Each group is laid over its own aim point. Zeroing groups whose point of impact is hidden cannot be combined.</p>
+    <div class="grid-2">
+      <div class="field">
+        <label for="filter-rifle">Rifle</label>
+        <select id="filter-rifle"><option value="">All rifles</option></select>
+      </div>
+      <div class="field">
+        <label for="filter-distance">Distance</label>
+        <select id="filter-distance"><option value="">All distances</option></select>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th></th><th>Date</th><th>Rifle</th><th>Load</th><th>Lot</th><th class="num">Distance</th><th class="num">Shots</th><th>Purpose</th></tr>
+      </thead>
+      <tbody id="picker-body"></tbody>
+    </table>
+    <p id="picker-empty" class="muted" hidden>No finalized groups match.</p>
+    <div class="actions"><button type="button" id="aggregate-button" disabled>Aggregate selected groups</button></div>
+  </section>
+
+  <section class="card" id="aggregate-result" hidden>
+    <h2>Combined result</h2>
+    <div class="stat-grid" id="aggregate-stats"></div>
+    <div id="aggregate-badges"></div>
+    <div id="aggregate-warnings"></div>
+    <p class="muted" id="aggregate-note"></p>
+    <svg id="aggregate-plot" width="100%" role="img" aria-label="Combined shot positions"></svg>
+    <ul class="plot-legend" id="aggregate-legend"></ul>
+    <form data-form="save-aggregate" class="row" novalidate>
+      <div class="field grow">
+        <label for="aggregate-name">Name for this combination</label>
+        <input type="text" id="aggregate-name" name="name" maxlength="100">
+        <span class="hint">Needs at least two groups of one load. A saved combination of 30 or more shots is eligible for the 30-shot comparison; Compare shows whether it's counted.</span>
+      </div>
+      <div class="actions"><button type="submit">Save this combination</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Saved combinations</h2>
+    <p id="saved-empty" class="muted" hidden>No saved combinations yet.</p>
+    <ul id="saved-list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Search notes</h2>
+    <form data-form="search" class="row" novalidate>
+      <div class="field grow">
+        <label for="search-q">Find in group notes</label>
+        <input type="search" id="search-q" name="q" maxlength="200">
+      </div>
+      <div class="actions"><button type="submit">Search</button></div>
+    </form>
+    <p id="search-empty" class="muted" hidden>No notes match.</p>
+    <ul id="search-results"></ul>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/analysis.js"></script>
+{% endblock %}

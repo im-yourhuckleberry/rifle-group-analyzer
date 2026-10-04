@@ -1,0 +1,98 @@
+/* Group results page: plot layers, toggles and legend. */
+
+.layer.is-hidden { display: none; }
+
+.group-plot { background: #fbfaf5; border: 1px solid var(--line); border-radius: var(--radius); touch-action: none; cursor: grab; }
+.plot-frame { position: relative; }
+.plot-frame.is-panning .group-plot { cursor: grabbing; }
+.plot-zoom {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.plot-zoom button { padding: 0.15rem 0.55rem; min-width: 2rem; }
+.plot-zoom-level { min-width: 3rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+.spread-circle {
+  fill: none;
+  stroke: var(--group-color, var(--group-color-0));
+  stroke-width: 1.25;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  filter: var(--plot-halo);
+}
+
+.hitter-circle {
+  fill: none;
+  stroke: var(--hitter);
+  stroke-width: 1.25;
+  stroke-dasharray: 9 3 2 3;
+  vector-effect: non-scaling-stroke;
+  filter: var(--plot-halo);
+}
+
+.plot-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-bottom: 0.5rem; }
+.plot-toggles label { display: inline-flex; align-items: center; margin: 0; font-weight: 600; cursor: pointer; }
+
+.key-hitter circle { fill: none; stroke: var(--hitter); stroke-width: 1.25; stroke-dasharray: 6 2 1 2; vector-effect: non-scaling-stroke; }
+.key-circle circle { fill: none; stroke: var(--group-color-0); stroke-width: 1.25; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+
+/* Correction view: impacts fade, numbers hide, the aim and the mean point of impact stay in front. */
+.group-plot.correction-on .shot { opacity: 0.25; }
+.group-plot.correction-on .shot-label { display: none; }
+.group-plot.correction-on .layer-poi.is-hidden { display: inline; }
+.layer-correction line {
+  stroke: #1d2320;
+  stroke-width: 1.25;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  filter: var(--plot-halo);
+}
+.correction-text { margin-top: 0.75rem; font-size: 1.1rem; font-weight: 700; }
+.correction-why { margin-top: 0; }
+.plot-toggles label.is-disabled { color: var(--ink-soft); cursor: not-allowed; font-weight: 400; }
+.info-button {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-radius: 50%;
+  font: italic 700 0.9rem Georgia, "Times New Roman", serif;
+  line-height: 1;
+}
+.plot-controls { position: relative; }
+.info-card {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-width: 34rem;
+  margin-top: 0.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-size: 0.9rem;
+}
+.info-card p { margin: 0 0 0.5rem; }
+.info-card p:last-child { margin-bottom: 0; }
+.info-card.is-hidden, .layer-correction-note.is-hidden, .share-card.is-hidden { display: none; }
+.es-mil { font-size: 0.85em; }
+
+.share-card { margin: 0.75rem 0; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.share-card h3 { margin: 0 0 0.5rem; }
+.share-layers { border: 0; margin: 0 0 0.5rem; padding: 0; display: grid; gap: 0.25rem; }
+.share-layers legend { font-weight: 600; padding: 0; margin-bottom: 0.25rem; }
+.share-layers label { display: inline-flex; align-items: center; margin: 0; }
+.share-layers label.is-disabled { color: var(--ink-soft); cursor: not-allowed; }
+.share-why { font-size: 0.85rem; margin: 0 0 0.25rem 1.5rem; }
+.share-preview { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }

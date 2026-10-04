@@ -1,0 +1,47 @@
+/* Review editor: the photo is an <image> inside the SVG, so zoom and pan only change the viewBox. */
+
+.editor-wrap.review-editor { cursor: crosshair; }
+.editor-wrap.review-editor svg {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+/* Marker strokes keep their on-screen width at any zoom. */
+.review-editor .shot,
+.review-editor .aim-mark {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Suggested aim points: rings with a label, never clickable; the active one is emphasised. */
+.review-editor .aim-candidate {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke: var(--shot-aim);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+  filter: var(--plot-halo);
+}
+.review-editor .aim-candidate.active { stroke-width: 2.25; stroke-dasharray: none; }
+.review-editor .aim-candidate-label {
+  font: 600 13px var(--font);
+  fill: #fff;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 2px;
+  pointer-events: none;
+}
+.aim-suggestion .actions { margin-top: 0.5rem; }
+
+.zoom-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.zoom-toolbar button { padding: 0.25rem 0.7rem; min-width: 2.2rem; }
+.zoom-level { min-width: 3.5rem; font-variant-numeric: tabular-nums; }

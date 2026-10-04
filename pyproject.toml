@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rifle-group-analyzer"
+version = "0.1.0"
+description = "Local rifle group analyzer: target photos to per-rifle statistics."
+requires-python = ">=3.14,<3.15"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.in"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rga = ["db/migrations/*.sql", "web/templates/*.html", "web/static/**/*"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+pythonpath = ["src", "."]
+testpaths = ["tests/unit", "tests/integration"]
+addopts = "--disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --strict-markers"
+markers = [
+    "accuracy: detection-accuracy suite against the synthetic catalog (P-11 thresholds)",
+    "e2e: Playwright journeys through the real UI (applied automatically under tests/e2e)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests", "tools"]
+extend-exclude = ["data", ".venv-lock", ".playwright-browsers"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["rga", "tests", "tools"]
+
+[tool.bandit]

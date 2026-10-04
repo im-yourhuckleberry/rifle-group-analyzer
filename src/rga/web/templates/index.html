@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Rifle Group Analyzer{% endblock %}
+{% block content %}
+<div data-page="dashboard">
+  <h1>Dashboard</h1>
+
+  <section class="card">
+    <h2>Rifles</h2>
+    {% if dashboard.rifles %}
+    <table>
+      <thead>
+        <tr><th>Rifle</th><th>Cartridge</th><th class="num">Loads</th><th>Zero load</th><th>Active zero</th></tr>
+      </thead>
+      <tbody>
+        {% for s in dashboard.rifles %}
+        <tr>
+          <td><a href="/rifles/{{ s.rifle.id }}">{{ s.rifle.name }}</a></td>
+          <td>{{ s.rifle.cartridge }}</td>
+          <td class="num">{{ s.load_count }}</td>
+          <td>{% if s.zero_load_label %}{{ s.zero_load_label }}{% else %}<span class="muted">not set</span>{% endif %}</td>
+          <td data-active-zeros="{{ s.rifle.id }}">
+            {% for z in active_zeros[s.rifle.id] %}
+            <a href="/zeroing/{{ z.zero.id }}">{{ z.load_label }}{% if z.lot_code %} ({{ z.lot_code }}){% endif %}</a>{% if not loop.last %}, {% endif %}
+            {% else %}
+            <span class="muted">none</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice info">No rifles yet. <a href="/rifles">Add your first rifle</a> to start recording groups.</p>
+    {% endif %}
+    <div class="actions"><a class="button secondary" href="/rifles">Manage rifles</a></div>
+  </section>
+
+  <section class="card">
+    <h2>Recent groups</h2>
+    {% if dashboard.recent_groups %}
+    <table id="recent-groups">
+      <thead>
+        <tr><th>Date</th><th>Rifle</th><th>Load and lot</th><th class="num">Distance</th><th>Position</th><th class="num">Shots</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in dashboard.recent_groups %}
+        {% set g = r.group %}
+        <tr data-group-id="{{ g.id }}">
+          <td>{{ g.shot_date }}{% if g.shot_time %} {{ g.shot_time[:5] }}{% endif %}</td>
+          <td>{{ r.rifle_name }}</td>
+          <td>{{ r.load_label }} &middot; {{ r.lot_code }}</td>
+          <td class="num">{{ g.distance_yd }} yd</td>
+          <td>{{ g.position|replace("_", " ") }}{% if g.suppressor %} <span class="badge">suppressed</span>{% endif %}</td>
+          <td class="num">{{ r.shot_count }} of {{ g.shots_expected }}</td>
+          <td><span class="badge{% if g.status == 'draft' %} warn{% endif %}">{{ g.status }}</span></td>
+          <td><a href="/groups/{{ g.id }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No groups yet. Open a rifle and add a group from its page.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Analyze</h2>
+    <div class="actions">
+      <a class="button secondary" href="/analysis">Aggregate groups</a>
+      <a class="button secondary" href="/compare">Compare loads</a>
+      <a class="button secondary" href="/dope">Dope tables</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

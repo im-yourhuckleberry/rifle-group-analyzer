@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Review shots{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/review.css">{% endblock %}
+{% block content %}
+<div id="review-root" data-state="{{ state_json }}" data-group-id="{{ group_id }}">
+  <h1>Review shots</h1>
+  <p id="review-context" class="muted"></p>
+  <div id="review-notices"></div>
+
+  <div class="row">
+    <div class="grow">
+      <div class="zoom-toolbar" role="group" aria-label="Zoom and pan">
+        <button type="button" id="zoom-out-button" class="secondary" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoom-in-button" class="secondary" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-fit-button" class="secondary">Fit</button>
+        <button type="button" id="zoom-region-button" class="secondary">Zoom to region</button>
+        <span id="zoom-level" class="zoom-level muted" aria-live="polite">1.0&times;</span>
+      </div>
+      <div class="editor-wrap review-editor" id="editor-wrap">
+        <svg id="editor-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Target photo with the shots; scroll to zoom, drag empty space to pan"></svg>
+      </div>
+      <p class="muted" id="editor-hint"></p>
+    </div>
+
+    <aside class="grow card stack" aria-label="Review controls">
+      <div id="reference-change" class="stack" hidden>
+        <div class="actions">
+          <button type="button" id="reference-change-button" class="secondary">Change scale reference</button>
+        </div>
+        <p class="muted" id="reference-change-reason"></p>
+        <div id="reference-change-confirm" class="notice danger" role="alertdialog" aria-labelledby="reference-change-text" hidden>
+          <p id="reference-change-text"></p>
+          <div class="actions">
+            <button type="button" id="reference-change-continue" class="danger">Continue</button>
+            <button type="button" id="reference-change-cancel" class="secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div id="shot-counter" class="shot-counter" aria-live="polite">0 of 0 shots</div>
+        <div id="spread-line" class="muted"></div>
+        <span id="estimated-badge" class="badge warn" hidden>includes estimated shots</span>
+      </div>
+
+      <div class="field">
+        <label for="expected-input">Shots fired (expected)</label>
+        <input id="expected-input" type="number" min="1" max="200" step="1">
+      </div>
+
+      <div class="actions">
+        <button type="button" id="detect-button" class="secondary">Detect holes</button>
+        <button type="button" id="region-button" class="secondary">Set region</button>
+        <button type="button" id="fill-button" class="secondary">Fill shortfall</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="aim-button" class="secondary">Mark aim</button>
+        <button type="button" id="delete-button" class="danger" disabled>Not a bullet hole</button>
+      </div>
+      <div id="aim-status" class="muted"></div>
+      <div id="aim-suggestion" class="notice info aim-suggestion" aria-live="polite" hidden>
+        <div id="aim-suggestion-text"></div>
+        <div class="actions">
+          <button type="button" id="aim-use-button">Use this aim</button>
+          <button type="button" id="aim-next-button" class="secondary">Next</button>
+          <button type="button" id="aim-manual-button" class="secondary">Place it yourself</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="save-button" class="secondary">Save</button>
+        <button type="button" id="finalize-button" disabled>Finalize</button>
+        {% if return_to %}<a class="button secondary" id="back-link" href="{{ return_to }}">Back</a>{% endif %}
+      </div>
+      <p class="muted" id="finalize-reason"></p>
+    </aside>
+  </div>
+</div>
+<script type="module" src="/static/js/review.js"></script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Confirm reference · Rifle Group Analyzer{% endblock %}
+{% block content %}
+<h1>Confirm the printed reference</h1>
+<ol class="stepper" aria-label="Progress">
+  <li class="done">1. Photo imported</li>
+  <li class="current">2. Confirm reference</li>
+  <li>3. Review shots</li>
+</ol>
+<p class="muted">The app only proposes a reference. Nothing is measured until you pick one of the proposals or mark the reference yourself and press the confirm button.</p>
+
+<section id="reference-app" class="row"
+  data-photo-id="{{ photo.id }}"
+  data-width="{{ photo.width_px }}"
+  data-height="{{ photo.height_px }}"
+  data-confirmed="{{ 1 if photo.reference_confirmed else 0 }}"
+  data-review-url="{{ review_url or '' }}"
+  data-return-to="{{ return_to }}">
+  <div class="grow">
+    <div class="editor-wrap" id="viewer">
+      <img id="photo" src="/api/photos/{{ photo.id }}/image?variant=oriented" alt="Uploaded target photo, {{ photo.width_px }} by {{ photo.height_px }} pixels">
+      <svg id="overlay" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ photo.width_px }} {{ photo.height_px }}" aria-hidden="true"></svg>
+    </div>
+    <p class="muted" id="viewer-hint">Candidates are drawn on the photo. Choose one in the list, or switch to manual marking.</p>
+  </div>
+
+  <aside class="card stack grow">
+    {% if photo.reference_confirmed %}
+    {% if locked %}
+    <div class="notice info" id="already-confirmed">A reference is already confirmed for this photo (working image {{ photo.working_w }} x {{ photo.working_h }} px at {{ '%.1f'|format(photo.working_ppi) }} px/in). A group on this photo has saved shots or an aim. Use <strong>Change scale reference</strong> in the review editor to clear them and redo the scale. A finalized group locks the scale.</div>
+    {% else %}
+    <div class="notice info" id="already-confirmed">A reference is already confirmed for this photo (working image {{ photo.working_w }} x {{ photo.working_h }} px at {{ '%.1f'|format(photo.working_ppi) }} px/in). Confirming again replaces it and clears the saved detection regions of this photo's groups.</div>
+    {% endif %}
+    {% endif %}
+
+    <div class="field">
+      <label for="kind">What is printed on the target?</label>
+      <select id="kind">
+        {% for value, label in kinds %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="find">Find reference automatically</button>
+      <button type="button" class="secondary" id="manual-toggle" aria-pressed="false">Mark it by hand</button>
+    </div>
+
+    <div id="warnings" class="stack" role="status"></div>
+
+    <div id="candidates-panel" hidden>
+      <h2>Proposals</h2>
+      <p class="muted" id="candidates-empty" hidden>Nothing was found automatically. Mark the reference by hand.</p>
+      <div id="candidates" class="stack" role="radiogroup" aria-label="Proposed references"></div>
+      <div class="actions">
+        <button type="button" id="confirm-candidate" disabled>Use the selected proposal</button>
+      </div>
+    </div>
+
+    <div id="manual-panel" hidden>
+      <h2>Mark it by hand</h2>
+      <p id="manual-instructions" class="muted"></p>
+      <div id="grid-fields" class="row" hidden>
+        <div class="field">
+          <label for="squares-x">Squares across</label>
+          <input type="number" id="squares-x" min="1" max="100" step="1" value="4">
+        </div>
+        <div class="field">
+          <label for="squares-y">Squares down</label>
+          <input type="number" id="squares-y" min="1" max="100" step="1" value="4">
+        </div>
+      </div>
+      <p class="muted"><span id="mark-count">0</span> marks placed.</p>
+      <div class="actions">
+        <button type="button" class="secondary" id="undo-mark">Undo last mark</button>
+        <button type="button" class="secondary" id="clear-marks">Clear marks</button>
+        <button type="button" id="confirm-manual" disabled>Use my marks</button>
+      </div>
+    </div>
+
+    <div id="result" class="stack" hidden>
+      <h2>Reference confirmed</h2>
+      <div id="result-warnings" class="stack"></div>
+      <div class="actions">
+        <a class="button" id="continue" href="/">Continue</a>
+      </div>
+    </div>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/reference.js"></script>
+{% endblock %}

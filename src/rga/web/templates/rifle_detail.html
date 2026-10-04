@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% from "suppressor_picker.html" import suppressor_picker %}
+{% block title %}{{ detail.rifle.name }}{% endblock %}
+{% macro num(v) %}{% if v is not none %}{{ v }}{% endif %}{% endmacro %}
+{% macro text(v) %}{% if v %}{{ v }}{% endif %}{% endmacro %}
+{% block content %}
+{% set rifle = detail.rifle %}
+<div data-page="rifle-detail" data-rifle-id="{{ rifle.id }}">
+  <p><a href="/rifles">&larr; All rifles</a></p>
+  <h1>{{ rifle.name }}</h1>
+
+  <section class="card">
+    <h2>Rifle</h2>
+    <form data-form="edit-rifle" novalidate>
+      <div class="grid-2">
+        <div class="field">
+          <label for="r-name">Name</label>
+          <input type="text" id="r-name" name="name" maxlength="200" value="{{ rifle.name }}" required>
+        </div>
+        <div class="field">
+          <label for="cartridge">Cartridge</label>
+          <input type="text" id="cartridge" name="cartridge" list="cartridge-list" maxlength="200" value="{{ rifle.cartridge }}" required autocomplete="off">
+          <datalist id="cartridge-list"></datalist>
+        </div>
+        <div class="field">
+          <label for="bullet_diameter_in">Bullet diameter (in)</label>
+          {% set current = "%.3f"|format(rifle.bullet_diameter_in) %}
+          {% set ns = namespace(listed=false) %}
+          <select id="bullet_diameter_in" name="bullet_diameter_in" required>
+            {% for d in diameters %}{% set v = "%.3f"|format(d) %}{% if v == current %}{% set ns.listed = true %}{% endif %}<option value="{{ v }}"{% if v == current %} selected{% endif %}>{{ v }} in</option>
+            {% endfor %}
+            {% if not ns.listed %}<option value="{{ rifle.bullet_diameter_in }}" selected>{{ current }} in (current)</option>{% endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-scope">Scope</label>
+          <input type="text" id="r-scope" name="scope" maxlength="200" value="{{ text(rifle.scope) }}">
+        </div>
+      </div>
+      <div class="field">
+        <label for="r-notes">Notes</label>
+        <textarea id="r-notes" name="notes" maxlength="10000">{{ rifle.notes }}</textarea>
+      </div>
+      <div class="actions"><button type="submit">Save rifle</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Zero load</h2>
+    <p class="muted">The load this rifle is zeroed with. Other loads are compared against it.</p>
+    {% if detail.loads %}
+    <form data-form="zero-load" class="row" novalidate>
+      <div class="field grow">
+        <label for="zero-load-select">Zero load</label>
+        <select id="zero-load-select" name="load_id">
+          <option value="">(none)</option>
+          {% for item in detail.loads %}
+          <option value="{{ item.load.id }}"{% if item.load.id == rifle.zero_load_id %} selected{% endif %}>{{ item.load.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="actions"><button type="submit">Set zero load</button></div>
+    </form>
+    {% else %}
+    <p class="muted">Add a load first.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" data-section="zeroing">
+    <h2>Zeroing</h2>
+    <p class="muted">Zero the rifle in steps: a first group, a confirming group and the dot. Starting a zero opens its page.</p>
+    {% if detail.loads %}
+    <form data-form="new-zero" novalidate>
+      <div class="grid-2">
+        <div class="field">
+          <label for="zero-start-load">Load</label>
+          <select id="zero-start-load" name="load_id">
+            {% for item in detail.loads %}
+            <option value="{{ item.load.id }}"{% if item.load.id == rifle.zero_load_id %} selected{% endif %}>{{ item.load.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="zero-start-lot">Lot number or batch ID (optional)</label>
+          <input type="text" id="zero-start-lot" name="lot_code" maxlength="64">
+        </div>
+        <div class="field">
+          <label for="zero-start-mode">Where are you starting?</label>
+          <select id="zero-start-mode" name="mode">
+            <option value="new_setup">New setup / bore-sighted</option>
+            <option value="existing">Existing zero</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions"><button type="submit">Start a zero</button></div>
+    </form>
+    {% else %}
+    <p class="muted">Add a load first; a zero belongs to one load.</p>
+    {% endif %}
+
+    <h3>This rifle's zeros</h3>
+    {% if zeros %}
+    <table data-zeros>
+      <thead><tr><th>State</th><th>Load</th><th>Lot</th><th>Started</th><th></th></tr></thead>
+      <tbody>
+        {% for z in zeros %}
+        <tr data-zero-id="{{ z.zero.id }}" data-state="{{ z.zero.state }}">
+          <td><span class="badge{% if z.zero.state == 'superseded' %} warn{% endif %}">{{ zero_states.get(z.zero.state, z.zero.state) }}</span></td>
+          <td>{{ z.load_label }}</td>
+          <td>{% if z.lot_code %}{{ z.lot_code }}{% else %}<span class="muted">none</span>{% endif %}</td>
+          <td>{{ z.zero.created_at[:10] }}</td>
+          <td><a href="/zeroing/{{ z.zero.id }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No zeros yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Loads</h2>
+    {% if not detail.loads %}<p class="muted">No loads yet.</p>{% endif %}
+    {% for item in detail.loads %}
+    {% set load = item.load %}
+    <article class="card" data-load-id="{{ load.id }}">
+      <h3>{{ load.label }}
+        <span class="badge">{{ load.kind }}</span>
+        {% if load.id == rifle.zero_load_id %}<span class="badge warn">zero load</span>{% endif %}
+      </h3>
+      <p>
+        {% if load.kind == "factory" %}
+        {{ load.maker or "" }} {{ load.product or "" }}
+        {% if load.bullet_weight_gr is not none %}{{ load.bullet_weight_gr }} gr{% endif %}
+        {{ load.bullet_type or "" }}
+        {% else %}
+        <span data-bullet>{% if load.bullet_weight_gr is not none %}{{ "%g"|format(load.bullet_weight_gr) }} gr{% endif %}{% if load.bullet_weight_gr is not none and load.bullet %} {% endif %}{{ load.bullet or "" }}</span>
+        {% if load.primer %}<span class="muted">primer</span> {{ load.primer }}{% endif %}
+        {% if load.brass %}<span class="muted">brass</span> {{ load.brass }}{% endif %}
+        {% if load.coal_in is not none %}<span class="muted">COAL</span> {{ "%.3f"|format(load.coal_in) }} in{% endif %}
+        {% endif %}
+        {% if load.trued_mv_fps is not none %}<span class="muted">trued MV {{ load.trued_mv_fps }} fps</span>{% endif %}
+      </p>
+      {% if load.notes %}<p>{{ load.notes }}</p>{% endif %}
+
+      <h3>Lots</h3>
+      {% if item.lots %}
+      <p>{% for lot in item.lots %}<span class="badge">{{ lot.lot_code }}</span> {% endfor %}</p>
+      {% else %}
+      <p class="muted">No lots yet. A lot is created when you record a group with a new lot code.</p>
+      {% endif %}
+      <form data-form="new-lot" data-load-id="{{ load.id }}" class="row" novalidate>
+        <div class="field grow">
+          <label for="lot-{{ load.id }}">{% if load.kind == "factory" %}Lot number{% else %}Batch ID{% endif %}</label>
+          <input type="text" id="lot-{{ load.id }}" name="lot_code" maxlength="64" required>
+        </div>
+        <div class="actions"><button type="submit" class="secondary">Add lot</button></div>
+      </form>
+
+      <details>
+        <summary>Edit this load</summary>
+        <form data-form="edit-load" data-load-id="{{ load.id }}" data-kind="{{ load.kind }}" novalidate>
+          <div class="grid-2">
+            <div class="field">
+              <label>Label</label>
+              <input type="text" name="label" maxlength="200" value="{{ load.label }}" required>
+            </div>
+            {% if load.kind == "factory" %}
+            <div class="field"><label>Maker</label><input type="text" name="maker" maxlength="200" value="{{ text(load.maker) }}"></div>
+            <div class="field"><label>Product</label><input type="text" name="product" maxlength="200" value="{{ text(load.product) }}"></div>
+            <div class="field"><label>Bullet weight (gr)</label><input type="number" name="bullet_weight_gr" step="0.1" min="0.1" value="{{ num(load.bullet_weight_gr) }}"></div>
+            <div class="field"><label>Bullet type</label><input type="text" name="bullet_type" maxlength="200" value="{{ text(load.bullet_type) }}"></div>
+            {% else %}
+            <div class="field">
+              <label>Bullet</label>
+              <div class="row">
+                <input type="number" name="bullet_weight_gr" step="0.1" min="0.1" max="2000" placeholder="weight (gr)" aria-label="Bullet weight (gr)" value="{{ num(load.bullet_weight_gr) }}">
+                <input type="text" name="bullet" maxlength="200" placeholder="line, e.g. TMK" aria-label="Bullet line" value="{{ text(load.bullet) }}">
+              </div>
+            </div>
+            <div class="field"><label>Primer</label><input type="text" name="primer" maxlength="200" value="{{ text(load.primer) }}"></div>
+            <div class="field"><label>Brass</label><input type="text" name="brass" maxlength="200" value="{{ text(load.brass) }}"></div>
+            <div class="field"><label>COAL (in)</label><input type="number" name="coal_in" step="0.001" min="1" max="5" value="{{ num(load.coal_in) }}"></div>
+            {% endif %}
+            <div class="field"><label>Trued muzzle velocity (fps, optional)</label><input type="number" name="trued_mv_fps" step="1" min="1" value="{{ num(load.trued_mv_fps) }}"></div>
+          </div>
+          <div class="field"><label>Notes</label><textarea name="notes" maxlength="10000">{{ load.notes }}</textarea></div>
+          <div class="actions"><button type="submit">Save load</button></div>
+        </form>
+      </details>
+    </article>
+    {% endfor %}
+
+    <h3>Add a load</h3>
+    <form data-form="new-load" novalidate>
+      <div class="grid-2">
+        <div class="field">
+          <label for="kind">Type</label>
+          <select id="kind" name="kind">
+            {% for k in load_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="label">Label</label>
+          <input type="text" id="label" name="label" maxlength="200" required>
+        </div>
+      </div>
+      <div class="grid-2" data-kind-fields="factory">
+        <div class="field"><label for="maker">Maker</label><input type="text" id="maker" name="maker" maxlength="200"></div>
+        <div class="field"><label for="product">Product</label><input type="text" id="product" name="product" maxlength="200"></div>
+        <div class="field"><label for="bullet_weight_gr">Bullet weight (gr)</label><input type="number" id="bullet_weight_gr" name="bullet_weight_gr" step="0.1" min="0.1"></div>
+        <div class="field"><label for="bullet_type">Bullet type</label><input type="text" id="bullet_type" name="bullet_type" maxlength="200"></div>
+      </div>
+      <div class="grid-2" data-kind-fields="handload" hidden>
+        <div class="field">
+          <label for="handload_bullet_weight_gr">Bullet</label>
+          <div class="row">
+            <input type="number" id="handload_bullet_weight_gr" name="handload_bullet_weight_gr" step="0.1" min="0.1" max="2000" placeholder="weight (gr)" aria-label="Bullet weight (gr)">
+            <input type="text" id="bullet" name="bullet" maxlength="200" placeholder="line, e.g. TMK" aria-label="Bullet line">
+          </div>
+        </div>
+        <div class="field"><label for="primer">Primer</label><input type="text" id="primer" name="primer" maxlength="200"></div>
+        <div class="field"><label for="brass">Brass</label><input type="text" id="brass" name="brass" maxlength="200"></div>
+        <div class="field"><label for="coal_in">COAL (in)</label><input type="number" id="coal_in" name="coal_in" step="0.001" min="1" max="5"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="trued_mv_fps">Trued muzzle velocity (fps, optional)</label>
+          <input type="number" id="trued_mv_fps" name="trued_mv_fps" step="1" min="1">
+          <span class="hint">From your own ballistic app; the tool does not compute velocity.</span>
+        </div>
+      </div>
+      <div class="field"><label for="load-notes">Notes</label><textarea id="load-notes" name="notes" maxlength="10000"></textarea></div>
+      <div class="actions"><button type="submit">Add load</button></div>
+    </form>
+  </section>
+
+  <section class="card stack" id="groups-card" aria-label="Groups">
+    <h2>Groups</h2>
+    <p class="muted">Size is the smallest target every shot hit (center-to-center).</p>
+    {% if detail.days %}
+    {% for day in detail.days %}
+    <div class="day" data-day="{{ day.shot_date }}">
+      <h3>{{ day.shot_date }} <span class="muted">&middot; {% for d in day.distances %}{{ d }}{% if not loop.last %}, {% endif %}{% endfor %} yd</span></h3>
+      <table class="group-table">
+        <thead>
+          <tr>
+            <th>Group</th><th>Time</th><th class="num">Distance</th><th>Position</th><th>Load and lot</th>
+            <th class="num">Shots</th><th class="num">Size (in)</th><th class="num">Size (MOA)</th>
+            <th>Status</th><th>Notes</th><th>Photo and review</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in day.rows %}
+          {% set g = row.view.group %}
+          <tr data-group-id="{{ g.id }}"{% if g.photo_id %} data-photo-id="{{ g.photo_id }}"{% endif %}>
+            <td><a href="/groups/{{ g.id }}">#{{ g.id }}</a>{% if g.purpose != "general" %} <span class="badge">{{ g.purpose|replace("_", " ") }}</span>{% endif %}</td>
+            <td>{% if g.shot_time %}{{ g.shot_time[:5] }}{% else %}<span class="muted">none</span>{% endif %}</td>
+            <td class="num">{{ g.distance_yd }} yd</td>
+            <td>{{ position_labels.get(g.position, g.position) }}{% if g.suppressor %} <span class="badge">suppressed{% if row.suppressor_name %}: {{ row.suppressor_name }}{% endif %}</span>{% endif %}</td>
+            <td>
+              {{ row.load_label }} &middot; {{ row.view.lot_code }}
+              {% if row.view.new_lot and not row.masked %}<span class="badge warn" title="First group of a new lot">new lot: check POI against your zero load</span>{% endif %}
+            </td>
+            <td class="num">{{ row.shot_count }} of {{ g.shots_expected }}</td>
+            {% if row.size %}
+            <td class="num">{{ "%.2f"|format(row.size[1]) }}</td>
+            <td class="num">{{ "%.2f"|format(row.size[2]) }}</td>
+            {% else %}
+            <td class="num muted">none yet</td><td class="num muted">none yet</td>
+            {% endif %}
+            <td>
+              <span class="badge{% if g.status == 'draft' %} warn{% endif %}">{{ g.status }}</span>
+              {% if row.size and row.size[3] %}<span class="badge warn">includes estimated shots</span>{% endif %}
+            </td>
+            <td class="group-notes">{{ g.notes }}</td>
+            <td>
+              {% if g.status == 'final' %}
+                <a class="button secondary" href="/groups/{{ g.id }}">View</a>
+              {% elif g.photo_id %}
+                {% if row.photo and row.photo.reference_confirmed %}
+                <a class="button secondary" href="/groups/{{ g.id }}/review?return_to={{ ('/rifles/%d'|format(rifle.id))|urlencode }}">Review shots</a>
+                {% else %}
+                <a class="button secondary" href="/photos/{{ g.photo_id }}/reference?group_id={{ g.id }}&amp;return_to={{ ('/rifles/%d'|format(rifle.id))|urlencode }}">Confirm reference</a>
+                {% endif %}
+              {% else %}
+                <label class="button secondary">Import photo
+                  <input type="file" accept="image/*" class="visually-hidden js-import" data-group-id="{{ g.id }}">
+                </label>
+                {% set others = day.rows|selectattr("view.group.photo_id")|rejectattr("view.group.id", "equalto", g.id)|list %}
+                {% if others %}
+                <select class="js-existing" data-group-id="{{ g.id }}" aria-label="Use the photo of another group of this day">
+                  <option value="">Use existing photo&hellip;</option>
+                  {% for other in others %}
+                  <option value="{{ other.view.group.photo_id }}">Photo of group #{{ other.view.group.id }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="secondary js-use-existing" data-group-id="{{ g.id }}">Use</button>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted" id="no-groups">No groups yet. Add one below.</p>
+    {% endif %}
+  </section>
+
+  <section class="card stack" id="new-group-card" aria-label="Add a group" data-state="{{ state_json }}">
+    <h2>Add a group</h2>
+    {% if not detail.loads %}
+    <p class="notice danger">This rifle has no loads yet. Add a load above first.</p>
+    {% else %}
+    <div class="field">
+      <label for="g-photo">Target photo (optional)</label>
+      <input id="g-photo" type="file" accept="image/*">
+      <span class="hint" id="g-photo-note">Choosing a photo fills in the date and time it was taken.</span>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="g-date">Date</label>
+        <input id="g-date" type="date" value="{{ today }}">
+        <span class="hint" id="g-date-source">entered</span>
+      </div>
+      <div class="field">
+        <label for="g-time">Time (optional)</label>
+        <input id="g-time" type="time" step="60">
+      </div>
+      <div class="field">
+        <label for="g-distance">Distance (yd)</label>
+        <input id="g-distance" type="number" min="1" max="10000" step="1" value="{{ defaults.distance_yd if defaults.distance_yd is not none else 100 }}">
+      </div>
+      <div class="field">
+        <label for="g-position">Position</label>
+        <select id="g-position">
+          {% for value, label in position_labels.items() %}
+          <option value="{{ value }}"{% if value == (defaults.position or "bench") %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        {{ suppressor_picker("g", detail.suppressors, defaults.suppressor, defaults.suppressor_id) }}
+      </div>
+    </div>
+
+    <details id="weather-panel" class="card">
+      <summary>
+        Weather
+        <span class="badge warn" id="weather-required" hidden>needed at 200 yd and beyond</span>
+        <span class="muted" id="weather-optional">(optional)</span>
+        <span class="badge" id="weather-skipped-badge" hidden>weather skipped</span>
+      </summary>
+      <div class="stack">
+        <p class="notice info" id="weather-notice" hidden>Enter the temperature, or skip weather, before adding the group.</p>
+        <div class="grid-2">
+          <div class="field"><label for="w-temp">Temperature (&deg;F)</label><input id="w-temp" type="number" step="0.1"></div>
+          <div class="field"><label for="w-da">Density altitude (ft, optional)</label><input id="w-da" type="number" step="1"></div>
+          <div class="field"><label for="w-wind">Wind (mph, optional)</label><input id="w-wind" type="number" min="0" step="0.1"></div>
+          <div class="field"><label for="w-clock">Wind direction (o'clock, optional)</label><input id="w-clock" type="number" min="1" max="12" step="1"></div>
+        </div>
+        <div class="actions"><button type="button" id="skip-weather" class="secondary">Skip weather</button></div>
+      </div>
+    </details>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="g-load">Load</label>
+        <select id="g-load">
+          {% for entry in detail.loads %}
+          <option value="{{ entry.load.id }}"{% if entry.load.id == defaults.load_id %} selected{% endif %}>{{ entry.load.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="g-lot">Lot or batch code</label>
+        <input id="g-lot" type="text" maxlength="64" list="g-lot-options" autocomplete="off" value="{{ defaults.lot_code or '' }}">
+        <datalist id="g-lot-options"></datalist>
+        <span class="hint">A new code starts a new lot of this load.</span>
+      </div>
+      <div class="field">
+        <label for="g-shots">Shots fired</label>
+        <input id="g-shots" type="number" min="1" max="200" step="1" value="{{ defaults.shots_expected or 5 }}">
+      </div>
+      <div class="field">
+        <label for="g-elevation">Elevation dialed (mil, optional)</label>
+        <input id="g-elevation" type="number" step="0.1">
+      </div>
+    </div>
+    <div class="field">
+      <label for="g-notes">Group notes</label>
+      <textarea id="g-notes" rows="2"></textarea>
+    </div>
+    <p class="notice info" id="group-blocked" hidden>Enter the weather, or skip it, before adding the group.</p>
+    <div class="actions"><button type="button" id="add-group">Add group</button></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/rifles.js"></script>
+<script type="module" src="/static/js/group_form.js"></script>
+{% endblock %}

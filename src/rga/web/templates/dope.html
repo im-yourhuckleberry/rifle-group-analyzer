@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Dope table · Rifle Group Analyzer{% endblock %}
+{% block content %}
+<h1>Dope table</h1>
+
+{% if load %}
+<section class="card stack" data-page="dope" data-load-id="{{ load.id }}">
+  <h2>{{ load.label }} <span class="muted">· {{ rifle.name }} ({{ rifle.cartridge }})</span></h2>
+  {% if load.trued_mv_fps %}
+  <p>Trued muzzle velocity: <span class="mono">{{ "%.0f"|format(load.trued_mv_fps) }} fps</span>
+    <span class="muted">(information only; nothing in this table uses it)</span></p>
+  {% endif %}
+  <p class="muted">Each row is a finalized group with an elevation recorded for it. <strong>Group center</strong> is the group's mean height relative to the aim point in mil (positive means above it). <strong>Centered elevation</strong> is the elevation dialed minus that center, the elevation that would have put the group on the aim point.</p>
+  <div id="dope-table"></div>
+</section>
+{% endif %}
+
+<section class="card stack">
+  <h2>{% if load %}Another load{% else %}Choose a load{% endif %}</h2>
+  {% if choices %}
+  <ul class="stack">
+    {% for choice in choices %}
+    <li><a href="/dope?load_id={{ choice.load.id }}">{{ choice.rifle_name }}: {{ choice.load.label }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">There are no loads yet. Add a rifle and a load on the <a href="/rifles">Rifles</a> page first.</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{% if load %}<script type="module" src="/static/js/dope.js"></script>{% endif %}
+{% endblock %}

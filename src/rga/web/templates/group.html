@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% from "suppressor_picker.html" import suppressor_picker %}
+{% block title %}Group {{ page.view.group.id }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/group.css">{% endblock %}
+{% block content %}
+{% set v = page.view %}
+{% set g = v.group %}
+{% set stats = page.stats %}
+<div data-page="group" data-group-id="{{ g.id }}">
+  <p><a href="/rifles/{{ v.rifle.id }}">&larr; {{ v.rifle.name }}</a></p>
+  <h1>Group {{ g.id }}
+    <span class="badge">{{ g.status }}</span>
+    <span class="badge">{{ g.purpose|replace("_", " ") }}</span>
+    {% if stats and stats.includes_estimated %}<span class="badge warn">includes estimated shots</span>{% endif %}
+  </h1>
+  <p class="muted" id="group-header">
+    {{ v.rifle.name }} &middot; {{ v.load.label }} &middot; lot {{ v.lot_code }} &middot;
+    {{ g.shot_date }}{% if g.shot_time %} {{ g.shot_time[:5] }}{% endif %}
+    ({% if g.shot_at_source == "photo" %}from photo{% elif g.shot_at_source == "manual" %}entered{% else %}carried over{% endif %})
+    &middot; {{ g.distance_yd }} yd &middot; {{ position_labels.get(g.position, g.position) }}
+    &middot; {% if g.suppressor %}suppressed{% if v.suppressor_name %} ({{ v.suppressor_name }}){% endif %}{% else %}unsuppressed{% endif %}
+    &middot; {% if g.weather_skipped %}weather skipped
+    {%- elif g.temperature_f is not none %}{{ g.temperature_f }}&deg;F
+    {%- if g.density_altitude_ft is not none %}, DA {{ g.density_altitude_ft }} ft{% endif %}
+    {%- if g.wind_mph is not none %}, wind {{ g.wind_mph }} mph{% if g.wind_clock is not none %} at {{ g.wind_clock }} o'clock{% endif %}{% endif %}
+    {%- else %}no weather{% endif %}
+  </p>
+  {% if v.new_lot %}
+  {% if page.masked %}<p class="notice">New lot.</p>{% else %}<p class="notice">New lot: check POI against your zero load.</p>{% endif %}
+  {% endif %}
+
+  <div class="row">
+    <section class="card grow">
+      <h2>Shots</h2>
+      {% if page.plot.shots %}
+      {% set plot = page.plot %}
+      <div class="plot-controls">
+      <div class="plot-toggles" role="group" aria-label="Plot layers">
+        {% if plot.photo %}<label><input type="checkbox" id="toggle-photo" data-layer="photo" checked> Show photo</label>{% endif %}
+        {% if plot.circle %}<label><input type="checkbox" id="toggle-circle" data-layer="circle" checked> Cone of fire</label>{% endif %}
+        {% if plot.poi %}<label><input type="checkbox" id="toggle-poi" data-layer="poi"> Mean POI</label>{% endif %}
+        {% if plot.hitter %}<label><input type="checkbox" id="toggle-hitter" data-layer="hitter"> “Thing-hitter” circle</label>
+        {% else %}<label class="is-disabled"><input type="checkbox" id="toggle-hitter" disabled> “Thing-hitter” circle</label>{% endif %}
+        <label{% if not plot.correction %} class="is-disabled"{% endif %}><input type="checkbox" id="toggle-correction" data-correction{% if not plot.correction %} disabled{% endif %}> Correction</label>
+        <button type="button" class="secondary share-button" id="share-open" aria-expanded="false" aria-controls="share-card">Share</button>
+        {% if plot.correction %}<button type="button" class="info-button" id="correction-info" aria-expanded="false" aria-controls="correction-card" aria-label="Which way to turn the turrets">i</button>{% endif %}
+      </div>
+      {% if not plot.hitter %}<p class="muted correction-why" id="hitter-why">{{ plot.hitter_blocked }}</p>{% endif %}
+      {% if not plot.correction %}<p class="muted correction-why" id="correction-why">{{ plot.correction_blocked }}</p>{% endif %}
+      {% if plot.correction %}
+      <div class="info-card is-hidden" id="correction-card" role="note">
+        <p>To move impacts up, turn the elevation turret in the direction marked UP. To move them right or left, turn the windage turret in the direction marked R or L.</p>
+        <p>Dial the amount shown, in that direction. One click is 0.1 mil on a mil/mil scope.</p>
+        <p>Check your own turret's markings: some turrets turn the opposite way.</p>
+        {% if plot.correction.distance_yd != 100 %}<p>At a distance other than 100 yd this is the hold or dial that centers the group at that distance. It is not a change to your zero.</p>{% endif %}
+      </div>
+      {% endif %}
+      </div>
+      <div class="plot-frame">
+      <svg class="group-plot group-color-0" viewBox="{{ plot.view_box }}" width="100%" role="img" aria-label="Shot positions">
+        {% if plot.photo %}
+        <g class="layer layer-photo">
+          <image href="{{ plot.photo.href }}" x="{{ "%.3f"|format(plot.photo.x) }}" y="{{ "%.3f"|format(plot.photo.y) }}" width="{{ "%.3f"|format(plot.photo.width) }}" height="{{ "%.3f"|format(plot.photo.height) }}" preserveAspectRatio="none"/>
+        </g>
+        {% endif %}
+        {% if plot.circle %}
+        <g class="layer layer-circle">
+          <circle class="spread-circle" cx="{{ "%.1f"|format(plot.circle.cx) }}" cy="{{ "%.1f"|format(plot.circle.cy) }}" r="{{ "%.1f"|format(plot.circle.r) }}"/>
+        </g>
+        {% endif %}
+        {% if plot.hitter %}
+        <g class="layer layer-hitter is-hidden">
+          <circle class="hitter-circle" cx="0" cy="0" r="{{ "%.1f"|format(plot.hitter.r) }}"/>
+        </g>
+        {% endif %}
+        {% for s in plot.shots %}
+        <circle class="{{ s.css_class }}" cx="{{ "%.1f"|format(s.cx) }}" cy="{{ "%.1f"|format(s.cy) }}" r="{{ "%.1f"|format(s.r) }}"/>
+        <text class="shot-label" x="{{ "%.1f"|format(s.cx + s.r) }}" y="{{ "%.1f"|format(s.cy - s.r) }}">{{ s.label }}</text>
+        {% endfor %}
+        {% if plot.correction %}
+        <g class="layer layer-correction is-hidden">
+          <line x1="{{ "%.1f"|format(plot.poi[0]) }}" y1="{{ "%.1f"|format(plot.poi[1]) }}" x2="{{ "%.1f"|format(plot.correction.corner[0]) }}" y2="{{ "%.1f"|format(plot.correction.corner[1]) }}"/>
+          <line x1="{{ "%.1f"|format(plot.correction.corner[0]) }}" y1="{{ "%.1f"|format(plot.correction.corner[1]) }}" x2="0" y2="0"/>
+        </g>
+        {% endif %}
+        {% if plot.aim %}
+        <g class="aim-mark">
+          <line x1="-24" y1="0" x2="24" y2="0"/>
+          <line x1="0" y1="-24" x2="0" y2="24"/>
+          <circle cx="0" cy="0" r="14"/>
+        </g>
+        {% endif %}
+        {% if plot.poi %}
+        <g class="layer layer-poi is-hidden" transform="translate({{ "%.1f"|format(plot.poi[0]) }} {{ "%.1f"|format(plot.poi[1]) }})">
+          <line class="poi-mark" x1="-11" y1="-11" x2="11" y2="11"/>
+          <line class="poi-mark" x1="-11" y1="11" x2="11" y2="-11"/>
+        </g>
+        {% endif %}
+      </svg>
+      <div class="plot-zoom" role="group" aria-label="Zoom the plot">
+        <button type="button" id="plot-zoom-out" class="secondary" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="plot-zoom-in" class="secondary" aria-label="Zoom in">+</button>
+        <button type="button" id="plot-zoom-fit" class="secondary">Fit</button>
+        <span id="plot-zoom-level" class="plot-zoom-level muted" aria-live="polite">1.0&times;</span>
+      </div>
+      </div>
+      {% set share_rows = [
+        ("photo", "Photo", plot.photo is not none, "This group has no photo."),
+        ("spread", "Cone of fire", plot.circle is not none, "A cone of fire needs two or more shots."),
+      ] %}
+      {% if not page.masked %}
+      {% set share_rows = share_rows + [
+        ("thing_hitter", "“Thing-hitter” circle", plot.hitter is not none, plot.hitter_blocked),
+        ("poi", "Mean POI", plot.poi is not none, "Mark the aim point to show the mean point of impact."),
+        ("correction", "Correction", plot.correction is not none, plot.correction_blocked),
+      ] %}
+      {% endif %}
+      {% set share_rows = share_rows + [("numbers", "Shot numbers", true, "")] %}
+      <div class="share-card is-hidden" id="share-card" role="region" aria-label="Share this group as an image" data-defaults="{{ share_defaults_json }}">
+        <h3>Share</h3>
+        <fieldset class="share-layers">
+          <legend>Layers to draw</legend>
+          {% for key, label, allowed, reason in share_rows %}
+          <label{% if not allowed %} class="is-disabled"{% endif %}><input type="checkbox" data-share-layer="{{ key }}"{% if not allowed %} disabled{% endif %}> {{ label }}</label>
+          {% if not allowed %}<span class="muted share-why">{{ reason }}</span>{% endif %}
+          {% endfor %}
+        </fieldset>
+        <p class="muted" id="share-status" aria-live="polite"></p>
+        <img id="share-preview" class="share-preview" alt="Preview of the share image" width="1000">
+        <p><a id="share-download" class="button" href="/api/groups/{{ g.id }}/share.png" download="group-{{ g.id }}.png">Download PNG</a></p>
+      </div>
+      <ul class="plot-legend">
+        {% if plot.aim %}<li><span class="key key-aim"><svg viewBox="-12 -12 24 24" aria-hidden="true"><line x1="-10" y1="0" x2="10" y2="0"/><line x1="0" y1="-10" x2="0" y2="10"/><circle cx="0" cy="0" r="6"/></svg></span><span>Aim point (point of aim, red crosshair).</span></li>{% endif %}
+        {% if plot.poi %}<li><span class="key key-poi"><svg viewBox="-12 -12 24 24" aria-hidden="true"><line x1="-8" y1="-8" x2="8" y2="8"/><line x1="-8" y1="8" x2="8" y2="-8"/></svg></span><span>Mean point of impact: the average of every shot center (open dark x, shown with the Mean POI toggle). The distance from the aim point is the group's offset.</span></li>{% endif %}
+        {% if plot.hitter %}<li><span class="key key-hitter"><svg viewBox="-12 -12 24 24" aria-hidden="true"><circle cx="0" cy="0" r="10"/></svg></span><span>“Thing-hitter” circle: centered on the aim point and reaching the farthest shot center, {{ "%.2f"|format(plot.hitter.diameter_in) }} in across ({{ "%.2f"|format(plot.hitter.diameter_moa) }} MOA, {{ "%.2f"|format(plot.hitter.diameter_mil) }} mil at {{ plot.hitter.distance_yd }} yd). It is the size of target this group would have hit with this aim.</span></li>{% endif %}
+        {% if plot.circle %}<li><span class="key key-circle"><svg viewBox="-12 -12 24 24" aria-hidden="true"><circle cx="0" cy="0" r="10"/></svg></span><span>Cone of fire: the smallest circle that holds every shot center{% if plot.circle.diameter_in is not none %}, {{ "%.2f"|format(plot.circle.diameter_in) }} in across ({{ "%.2f"|format(plot.circle.diameter_moa) }} MOA, {{ "%.2f"|format(plot.circle.diameter_mil) }} mil at {{ plot.circle.distance_yd }} yd){% endif %}. It is a second view of the group; the extreme spread is the largest distance between two shot centers.</span></li>{% endif %}
+      </ul>
+      {% if plot.correction %}<p class="correction-text layer-correction-note is-hidden" id="correction-text">{{ plot.correction.text }}</p>{% endif %}
+      {% else %}
+      <p class="muted">No shots recorded yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="card grow">
+      <h2>Size{% if not page.masked %} and point of impact{% endif %}</h2>
+      {% if stats %}
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Shots</div><div class="value">{{ stats.n }}</div></div>
+        <div class="stat">
+          <div class="label">Extreme spread</div>
+          <div class="value">{{ "%.2f"|format(stats.es_in) }} in</div>
+          <div class="sub">{{ "%.2f"|format(stats.es_moa) }} MOA <span class="muted es-mil" id="es-mil">&middot; {{ "%.2f"|format(page.es_mil) }} mil</span></div>
+        </div>
+        {% if page.poi_text %}
+        <div class="stat">
+          <div class="label">Mean POI</div>
+          <div class="value">{{ page.poi_text }}</div>
+          <div class="sub">{{ "%.2f"|format(stats.mean_dx_in) }} in right, {{ "%.2f"|format(stats.mean_dy_in) }} in up</div>
+        </div>
+        {% endif %}
+      </div>
+      <p class="muted">Extreme spread is the {{ es_label }}.</p>
+      {% if page.masked %}
+      <p class="notice info">The point of impact is hidden for this zeroing group; only its size is shown.</p>
+      {% elif not page.poi_text %}
+      <p class="notice info">Mark the aim point in the editor to see the mean POI.</p>
+      {% endif %}
+      {% if stats.includes_estimated %}<p class="notice">Some shots are estimated inside a torn hole. The numbers include them.</p>{% endif %}
+      {% else %}
+      <p class="muted">Statistics appear once the group has shots.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {% if v.shots %}
+  <section class="card">
+    <h2>Shot list</h2>
+    <table>
+      <thead>
+        <tr><th class="num">#</th><th>Origin</th>{% if not page.masked %}<th class="num">Offset right (in)</th><th class="num">Offset up (in)</th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for s in v.shots %}
+        <tr>
+          <td class="num">{{ s.seq }}</td>
+          <td>{{ s.origin }}{% if s.moved_by_user %} <span class="muted">(moved)</span>{% endif %}</td>
+          {% if not page.masked %}
+          <td class="num">{% if s.dx_in is not none %}{{ "%.2f"|format(s.dx_in) }}{% endif %}</td>
+          <td class="num">{% if s.dy_in is not none %}{{ "%.2f"|format(s.dy_in) }}{% endif %}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="card stack" id="context-card" aria-label="Context">
+    <h2>Context</h2>
+    <div class="grid-2">
+      <div class="field">
+        <label for="c-date">Date</label>
+        <input id="c-date" type="date" value="{{ g.shot_date }}">
+      </div>
+      <div class="field">
+        <label for="c-time">Time (optional)</label>
+        <input id="c-time" type="time" step="60" value="{{ g.shot_time[:5] if g.shot_time else '' }}">
+      </div>
+      <div class="field">
+        <label for="c-distance">Distance (yd)</label>
+        <input id="c-distance" type="number" min="1" max="10000" step="1" value="{{ g.distance_yd }}"{% if g.zero_id is not none %} disabled{% endif %} data-original="{{ g.distance_yd }}">
+        {% if g.zero_id is not none %}<span class="hint" id="c-distance-locked">This group is part of a zero. Detach it from the zero before changing the distance.</span>{% endif %}
+      </div>
+      <div class="field">
+        <label for="c-position">Position</label>
+        <select id="c-position">
+          {% for value, label in position_labels.items() %}
+          <option value="{{ value }}"{% if value == g.position %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        {{ suppressor_picker("c", suppressors, g.suppressor, g.suppressor_id) }}
+      </div>
+    </div>
+    <details id="c-weather"{% if g.temperature_f is not none or g.weather_skipped or g.distance_yd >= 200 %} open{% endif %}>
+      <summary>Weather</summary>
+      <div class="grid-2">
+        <div class="field"><label for="c-temp">Temperature (&deg;F)</label><input id="c-temp" type="number" step="0.1" value="{{ '' if g.temperature_f is none else g.temperature_f }}"></div>
+        <div class="field"><label for="c-da">Density altitude (ft, optional)</label><input id="c-da" type="number" step="1" value="{{ '' if g.density_altitude_ft is none else g.density_altitude_ft }}"></div>
+        <div class="field"><label for="c-wind">Wind (mph, optional)</label><input id="c-wind" type="number" min="0" step="0.1" value="{{ '' if g.wind_mph is none else g.wind_mph }}"></div>
+        <div class="field"><label for="c-clock">Wind direction (o'clock, optional)</label><input id="c-clock" type="number" min="1" max="12" step="1" value="{{ '' if g.wind_clock is none else g.wind_clock }}"></div>
+      </div>
+      <label for="c-skip-weather"><input id="c-skip-weather" type="checkbox"{% if g.weather_skipped %} checked{% endif %}> Skip weather for this group</label>
+    </details>
+    <div class="actions"><button type="button" id="c-save">Save context</button></div>
+  </section>
+
+  <section class="card">
+    <h2>Notes</h2>
+    <h3>Group notes</h3>
+    <form data-form="group-notes" novalidate>
+      <div class="field">
+        <label for="notes">Notes for this group</label>
+        <textarea id="notes" name="notes" maxlength="10000">{{ g.notes }}</textarea>
+      </div>
+      <div class="actions">
+        <button type="submit">Save notes</button>
+        {% if g.status == "draft" %}<a class="button secondary" href="/groups/{{ g.id }}/review?return_to=/groups/{{ g.id }}">Open in the editor</a>{% endif %}
+      </div>
+    </form>
+    {% if page.legacy_session_notes %}
+    <h3>Earlier notes (carried over)</h3>
+    <p id="earlier-notes">{{ page.legacy_session_notes }}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/analysis.js"></script>
+<script type="module" src="/static/js/group.js"></script>
+<script type="module" src="/static/js/group_context.js"></script>
+{% endblock %}

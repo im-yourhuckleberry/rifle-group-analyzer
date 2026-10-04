@@ -1,0 +1,20 @@
+{% macro suppressor_picker(prefix, suppressors, checked, selected_id) %}
+<div class="stack" data-suppressor-picker>
+  <label for="{{ prefix }}-suppressor"><input id="{{ prefix }}-suppressor" name="suppressor" type="checkbox" data-suppressor-check{% if checked %} checked{% endif %}> Suppressor on</label>
+  <div class="stack" data-suppressor-choice{% if not checked %} hidden{% endif %}>
+    <label for="{{ prefix }}-suppressor-name">Which suppressor</label>
+    <select id="{{ prefix }}-suppressor-name" data-suppressor-select>
+      <option value="">Not named</option>
+      {% for saved in suppressors %}
+      <option value="{{ saved.id }}"{% if saved.id == selected_id %} selected{% endif %}>{{ saved.name }}</option>
+      {% endfor %}
+      <option value="__new__">Add new&hellip;</option>
+    </select>
+    <div class="stack" data-suppressor-new hidden>
+      <input id="{{ prefix }}-suppressor-new" type="text" maxlength="80" placeholder="Suppressor name" aria-label="New suppressor name" data-suppressor-name>
+      <div class="actions"><button type="button" class="secondary" data-suppressor-save>Save suppressor</button></div>
+      <span class="hint">It is remembered and offered in the list next time.</span>
+    </div>
+  </div>
+</div>
+{% endmacro %}

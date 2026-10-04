@@ -1,0 +1,705 @@
+{
+ "meta": {
+  "purpose": "Visual (hand-read) hole counts and approximate hole centres for data/real_photos/real_01..05; NOT exact ground truth.",
+  "coordinates": "Original file pixels (x right, y down). Hole centres were read from 2-4x zoomed crops with a coordinate grid and are accurate to roughly +/-5 px (+/-12 px for the 100 px holes of real_01/02). Entries marked uncertain are judgement calls.",
+  "scoring": "tests/integration/test_detection_real_photos.py matches detection centres to holes with a gate of 0.6 bullet diameters; detections outside sheet_polygon are ignored; detections near a listed decoy are counted as known decoys.",
+  "px_per_in": "Grid pitch measured by eye; used only to size the detector (photos are rescaled to 200 ppi before detection).",
+  "baseline": {
+   "description": "Per-photo found / false-positive counts against the hole lists above. 'before' is the T2.4 spike detector; 'after' is the detector after FY2.5 (clump cell-centroid rule removed) and is the floor/ceiling asserted by test_detection_real_photos.py.",
+   "before": {
+    "real_01": {
+     "found": 6,
+     "false_positives": 8
+    },
+    "real_02": {
+     "found": 2,
+     "false_positives": 1
+    },
+    "real_03": {
+     "found": 16,
+     "false_positives": 8
+    },
+    "real_04": {
+     "found": 7,
+     "false_positives": 4
+    },
+    "real_05": {
+     "found": 16,
+     "false_positives": 12
+    }
+   },
+   "after": {
+    "real_01": {
+     "found": 6,
+     "false_positives": 2,
+     "missed": [
+      2,
+      3
+     ],
+     "outside_sheet_ignored": 0,
+     "detections": 8
+    },
+    "real_02": {
+     "found": 8,
+     "false_positives": 1,
+     "missed": [
+      3
+     ],
+     "outside_sheet_ignored": 0,
+     "detections": 9
+    },
+    "real_03": {
+     "found": 20,
+     "false_positives": 4,
+     "missed": [
+      10,
+      11
+     ],
+     "outside_sheet_ignored": 7,
+     "detections": 31
+    },
+    "real_04": {
+     "found": 12,
+     "false_positives": 1,
+     "missed": [
+      2,
+      10
+     ],
+     "outside_sheet_ignored": 28,
+     "detections": 42
+    },
+    "real_05": {
+     "found": 22,
+     "false_positives": 3,
+     "missed": [
+      7,
+      9,
+      10
+     ],
+     "outside_sheet_ignored": 11,
+     "detections": 36
+    }
+   }
+  }
+ },
+ "photos": {
+  "real_01": {
+   "px_per_in": 450.0,
+   "bullet_d_in": 0.224,
+   "visual_count": 8,
+   "count_note": "Notes say 9; I read 8 distinct lobes. The tall merged blob near (913,700) may hold 2 or 3 holes.",
+   "holes": [
+    {
+     "x": 730,
+     "y": 657
+    },
+    {
+     "x": 1092,
+     "y": 647
+    },
+    {
+     "x": 915,
+     "y": 662,
+     "uncertain": true,
+     "note": "upper lobe of merged blob"
+    },
+    {
+     "x": 912,
+     "y": 735,
+     "uncertain": true,
+     "note": "lower lobe of merged blob"
+    },
+    {
+     "x": 717,
+     "y": 772
+    },
+    {
+     "x": 620,
+     "y": 812
+    },
+    {
+     "x": 770,
+     "y": 872
+    },
+    {
+     "x": 862,
+     "y": 870
+    }
+   ],
+   "clusters": [
+    {
+     "members": [
+      2,
+      3
+     ],
+     "kind": "merged",
+     "note": "touching holes, read as one tall blob"
+    },
+    {
+     "members": [
+      4,
+      5
+     ],
+     "kind": "touching"
+    },
+    {
+     "members": [
+      6,
+      7
+     ],
+     "kind": "touching"
+    }
+   ],
+   "sheet_polygon": null,
+   "decoys": [
+    {
+     "x": 466,
+     "y": 135,
+     "note": "red band tip"
+    },
+    {
+     "x": 1437,
+     "y": 507,
+     "note": "wrinkle shadow on orange bull"
+    },
+    {
+     "x": 1498,
+     "y": 489,
+     "note": "wrinkle shadow on orange bull"
+    },
+    {
+     "x": 1396,
+     "y": 986,
+     "note": "black ring / grid crossing"
+    },
+    {
+     "x": 1554,
+     "y": 923,
+     "note": "black ring crossing"
+    },
+    {
+     "x": 1791,
+     "y": 1423,
+     "note": "red wedge edge"
+    },
+    {
+     "x": 1493,
+     "y": 1471,
+     "note": "red wedge edge"
+    },
+    {
+     "x": 1887,
+     "y": 1043,
+     "note": "QR code"
+    }
+   ]
+  },
+  "real_02": {
+   "px_per_in": 475.0,
+   "bullet_d_in": 0.224,
+   "visual_count": 9,
+   "count_note": "Clear: 7 isolated rims plus a touching pair at (822,622)/(890,625). Holes are grey textured rims with a bright pinhole.",
+   "holes": [
+    {
+     "x": 755,
+     "y": 400
+    },
+    {
+     "x": 968,
+     "y": 385
+    },
+    {
+     "x": 883,
+     "y": 507
+    },
+    {
+     "x": 822,
+     "y": 622
+    },
+    {
+     "x": 890,
+     "y": 625
+    },
+    {
+     "x": 945,
+     "y": 675
+    },
+    {
+     "x": 1060,
+     "y": 640
+    },
+    {
+     "x": 575,
+     "y": 705
+    },
+    {
+     "x": 840,
+     "y": 790
+    }
+   ],
+   "clusters": [
+    {
+     "members": [
+      3,
+      4
+     ],
+     "kind": "touching"
+    }
+   ],
+   "sheet_polygon": null,
+   "decoys": []
+  },
+  "real_03": {
+   "px_per_in": 147.0,
+   "bullet_d_in": 0.224,
+   "visual_count": 22,
+   "count_note": "22 on the sheet; the large round hole at (683,1842) is a hanger hole (decoy). Many more holes lie in the cardboard outside the sheet and are ignored. Red pen circles mark earlier holes.",
+   "holes": [
+    {
+     "x": 1095,
+     "y": 380
+    },
+    {
+     "x": 532,
+     "y": 622
+    },
+    {
+     "x": 1104,
+     "y": 701
+    },
+    {
+     "x": 378,
+     "y": 722
+    },
+    {
+     "x": 436,
+     "y": 830
+    },
+    {
+     "x": 1024,
+     "y": 921
+    },
+    {
+     "x": 374,
+     "y": 935
+    },
+    {
+     "x": 629,
+     "y": 917
+    },
+    {
+     "x": 633,
+     "y": 950
+    },
+    {
+     "x": 620,
+     "y": 986
+    },
+    {
+     "x": 673,
+     "y": 989
+    },
+    {
+     "x": 731,
+     "y": 1105
+    },
+    {
+     "x": 717,
+     "y": 1183
+    },
+    {
+     "x": 786,
+     "y": 1224
+    },
+    {
+     "x": 935,
+     "y": 1148
+    },
+    {
+     "x": 680,
+     "y": 1312
+    },
+    {
+     "x": 929,
+     "y": 1348
+    },
+    {
+     "x": 865,
+     "y": 1368
+    },
+    {
+     "x": 777,
+     "y": 1430
+    },
+    {
+     "x": 529,
+     "y": 1559
+    },
+    {
+     "x": 604,
+     "y": 1712
+    },
+    {
+     "x": 963,
+     "y": 1889,
+     "uncertain": true,
+     "note": "dark mark on the 2R label, probably a hole"
+    }
+   ],
+   "clusters": [],
+   "sheet_polygon": [
+    [
+     0,
+     262
+    ],
+    [
+     750,
+     225
+    ],
+    [
+     1500,
+     178
+    ],
+    [
+     1500,
+     1930
+    ],
+    [
+     0,
+     1930
+    ]
+   ],
+   "decoys": [
+    {
+     "x": 683,
+     "y": 1842,
+     "note": "hanger hole"
+    },
+    {
+     "x": 30,
+     "y": 1870,
+     "note": "printed label text"
+    },
+    {
+     "x": 1335,
+     "y": 1858,
+     "note": "printed text"
+    },
+    {
+     "x": 1435,
+     "y": 1870,
+     "note": "printed text"
+    }
+   ]
+  },
+  "real_04": {
+   "px_per_in": 108.0,
+   "bullet_d_in": 0.224,
+   "visual_count": 14,
+   "count_note": "Lower sheet only. Three-hole cluster at (300,765)/(337,787)/(303,795) and two touching pairs. The upper sheet hole at (130,380) is on another sheet and ignored; (750,540) is a hanger hole.",
+   "holes": [
+    {
+     "x": 255,
+     "y": 795
+    },
+    {
+     "x": 300,
+     "y": 765,
+     "uncertain": true,
+     "note": "cluster of 3"
+    },
+    {
+     "x": 337,
+     "y": 787,
+     "uncertain": true,
+     "note": "cluster of 3"
+    },
+    {
+     "x": 303,
+     "y": 795,
+     "uncertain": true,
+     "note": "cluster of 3"
+    },
+    {
+     "x": 408,
+     "y": 847
+    },
+    {
+     "x": 467,
+     "y": 843
+    },
+    {
+     "x": 350,
+     "y": 863
+    },
+    {
+     "x": 343,
+     "y": 887
+    },
+    {
+     "x": 452,
+     "y": 910
+    },
+    {
+     "x": 465,
+     "y": 950
+    },
+    {
+     "x": 592,
+     "y": 887
+    },
+    {
+     "x": 705,
+     "y": 873
+    },
+    {
+     "x": 742,
+     "y": 938
+    },
+    {
+     "x": 592,
+     "y": 1107
+    }
+   ],
+   "clusters": [
+    {
+     "members": [
+      1,
+      2,
+      3
+     ],
+     "kind": "touching"
+    },
+    {
+     "members": [
+      6,
+      7
+     ],
+     "kind": "touching"
+    },
+    {
+     "members": [
+      8,
+      9
+     ],
+     "kind": "touching"
+    }
+   ],
+   "sheet_polygon": [
+    [
+     100,
+     525
+    ],
+    [
+     1420,
+     505
+    ],
+    [
+     1400,
+     1735
+    ],
+    [
+     155,
+     1735
+    ]
+   ],
+   "decoys": [
+    {
+     "x": 750,
+     "y": 540,
+     "note": "hanger hole"
+    },
+    {
+     "x": 258,
+     "y": 553,
+     "note": "printed text"
+    },
+    {
+     "x": 1240,
+     "y": 540,
+     "note": "printed text '10 TARGETS'"
+    }
+   ]
+  },
+  "real_05": {
+   "px_per_in": 135.0,
+   "bullet_d_in": 0.172,
+   "visual_count": 25,
+   "count_note": "25 holes. Dense centre cluster near the diamond: (975,632)/(953,647) overlap. The tape cross arms and the blue blob are decoys.",
+   "holes": [
+    {
+     "x": 1137,
+     "y": 502
+    },
+    {
+     "x": 1136,
+     "y": 567
+    },
+    {
+     "x": 1195,
+     "y": 553
+    },
+    {
+     "x": 1249,
+     "y": 570
+    },
+    {
+     "x": 993,
+     "y": 595
+    },
+    {
+     "x": 852,
+     "y": 627
+    },
+    {
+     "x": 843,
+     "y": 663
+    },
+    {
+     "x": 975,
+     "y": 632,
+     "uncertain": true,
+     "note": "overlaps next"
+    },
+    {
+     "x": 953,
+     "y": 647,
+     "uncertain": true,
+     "note": "overlaps previous"
+    },
+    {
+     "x": 1023,
+     "y": 650
+    },
+    {
+     "x": 974,
+     "y": 738
+    },
+    {
+     "x": 947,
+     "y": 823
+    },
+    {
+     "x": 733,
+     "y": 816
+    },
+    {
+     "x": 1245,
+     "y": 783
+    },
+    {
+     "x": 1188,
+     "y": 820
+    },
+    {
+     "x": 1488,
+     "y": 1161
+    },
+    {
+     "x": 1386,
+     "y": 1236,
+     "uncertain": true,
+     "note": "on the tape arm"
+    },
+    {
+     "x": 1430,
+     "y": 1265
+    },
+    {
+     "x": 1491,
+     "y": 1284
+    },
+    {
+     "x": 1511,
+     "y": 1292
+    },
+    {
+     "x": 1025,
+     "y": 255
+    },
+    {
+     "x": 458,
+     "y": 832
+    },
+    {
+     "x": 830,
+     "y": 1022
+    },
+    {
+     "x": 1160,
+     "y": 1010
+    },
+    {
+     "x": 1210,
+     "y": 1018
+    }
+   ],
+   "clusters": [
+    {
+     "members": [
+      7,
+      8
+     ],
+     "kind": "touching"
+    },
+    {
+     "members": [
+      18,
+      19
+     ],
+     "kind": "touching"
+    }
+   ],
+   "sheet_polygon": [
+    [
+     175,
+     0
+    ],
+    [
+     1735,
+     0
+    ],
+    [
+     1735,
+     1480
+    ],
+    [
+     130,
+     1480
+    ]
+   ],
+   "decoys": [
+    {
+     "x": 955,
+     "y": 15,
+     "note": "hanger hole"
+    },
+    {
+     "x": 1328,
+     "y": 1137,
+     "note": "tape cross arm"
+    },
+    {
+     "x": 1320,
+     "y": 1343,
+     "note": "tape cross arm"
+    },
+    {
+     "x": 1328,
+     "y": 1237,
+     "note": "tape blob"
+    },
+    {
+     "x": 215,
+     "y": 1360,
+     "note": "staple"
+    },
+    {
+     "x": 1640,
+     "y": 95,
+     "note": "staple"
+    }
+   ]
+  }
+ }
+}

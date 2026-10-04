@@ -1,0 +1,12 @@
+# Development and test dependencies. Locked together with the runtime set into requirements-dev.lock.
+-c requirements.lock
+-r requirements.in
+pytest>=9,<10
+pytest-socket>=0.7,<1
+httpx>=0.28,<1
+playwright>=1.50,<2
+pytest-playwright>=0.7,<1
+pip-tools>=7.5,<8
+ruff>=0.9,<1
+bandit>=1.8,<2
+pip-audit>=2.9,<3

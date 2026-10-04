@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Compare loads{% endblock %}
+{% block content %}
+{% if rifle is none %}
+<div data-page="compare-picker" class="stack">
+  <h1>Compare loads</h1>
+  <section class="card">
+    <h2>Choose a rifle</h2>
+    {% if rifles %}
+    <ul>
+      {% for r in rifles %}
+      <li><a href="/compare?rifle_id={{ r.id }}">{{ r.name }}</a> <span class="muted">{{ r.cartridge }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No rifles yet. <a href="/rifles">Add a rifle</a> and shoot some groups first.</p>
+    {% endif %}
+  </section>
+</div>
+{% else %}
+<div id="compare-root" data-page="compare" data-rifle-id="{{ rifle.id }}" class="stack">
+  <h1>Compare loads: {{ rifle.name }}</h1>
+  <p class="muted">Loads are compared like with like: the average of their 10-shot groups, and separately the average of their groups of 30 or more shots, including saved combinations of that size (save one on the <a href="/analysis">Analysis</a> page). Group size is the smallest target every shot hit (center-to-center).</p>
+
+  <section class="card stack" aria-label="Choose loads">
+    <h2>Loads</h2>
+    {% if loads %}
+    <div class="stack" id="load-choices">
+      {% for load in loads %}
+      <div class="field">
+        <label for="load-{{ load.id }}"><input type="checkbox" id="load-{{ load.id }}" value="{{ load.id }}" data-load-id="{{ load.id }}" checked>{{ load.label }}{% if rifle.zero_load_id == load.id %} <span class="badge">zero load</span>{% endif %}</label>
+        {% if load.notes %}<span class="hint">{{ load.notes }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="filter-position">Position</label>
+        <select id="filter-position">
+          <option value="">Any</option>
+          {% for value, label in positions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="filter-suppressor">Suppressor</label>
+        <select id="filter-suppressor">
+          <option value="">Any</option>
+          <option value="true">On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions"><button type="button" id="run-compare">Compare</button></div>
+    {% else %}
+    <p class="muted">This rifle has no loads yet. <a href="/rifles/{{ rifle.id }}">Add loads</a> first.</p>
+    {% endif %}
+  </section>
+
+  <div id="comparison-results" class="stack" aria-live="polite"></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if rifle is not none and loads %}<script type="module" src="/static/js/compare.js"></script>{% endif %}
+{% endblock %}

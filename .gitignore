@@ -1,0 +1,26 @@
+# Python isolation and caches
+.venv/
+.venv-lock/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# App runtime data (SQLite, photos, working images, real-photo annotations)
+/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Test and tool artifacts
+test-results/
+.coverage
+htmlcov/
+.playwright-browsers/
+
+# OS and editor
+.DS_Store
+.claude/settings.local.json

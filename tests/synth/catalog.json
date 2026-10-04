@@ -1,0 +1,1281 @@
+{
+  "scenarios": {
+    "clean_circle1": {
+      "description": "5-shot group, 1 in reference circle, tilt 0 (similarity-only camera), mild noise.",
+      "ppi": 200,
+      "rotation_deg": 4,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "offset_from_aim_in": [
+            0.3,
+            -0.2
+          ],
+          "spread_in": 0.7,
+          "n_single": 5
+        }
+      ]
+    },
+    "clean_circle3": {
+      "description": "10-shot group, 3 in reference circle, tilt 0.",
+      "ppi": 150,
+      "rotation_deg": -6,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 3.0,
+        "center_in": [
+          2.6,
+          2.6
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.8
+          ],
+          "diameter_in": 1.0,
+          "color": "orange"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.8
+          ],
+          "offset_from_aim_in": [
+            -0.2,
+            0.3
+          ],
+          "spread_in": 1.2,
+          "n_single": 10
+        }
+      ]
+    },
+    "clean_grid": {
+      "description": "10-shot group on a 1 in grid (8 x 10 squares), no perspective.",
+      "ppi": 160,
+      "rotation_deg": 3,
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            0.2,
+            0.2
+          ],
+          "spread_in": 1.2,
+          "n_single": 10
+        }
+      ]
+    },
+    "noisy_lighting": {
+      "description": "Strong lighting gradient, shadow band, heavy noise and JPEG, dirt specks; circle reference.",
+      "ppi": 150,
+      "rotation_deg": 8,
+      "blur_sigma_px": 1.2,
+      "noise_sigma": 8,
+      "texture_sigma": 5,
+      "jpeg_quality": 70,
+      "n_specks": 5,
+      "lighting": {
+        "gradient": 0.35,
+        "angle_deg": 50,
+        "vignette": 0.25,
+        "shadow": 0.3
+      },
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "offset_from_aim_in": [
+            -0.3,
+            0.2
+          ],
+          "spread_in": 1.2,
+          "n_single": 10
+        }
+      ]
+    },
+    "skew10_grid": {
+      "description": "Grid target photographed at 10 degrees tilt.",
+      "ppi": 170,
+      "rotation_deg": 5,
+      "tilt_deg": 10,
+      "tilt_axis_deg": 20,
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            -0.2,
+            0.1
+          ],
+          "spread_in": 1.2,
+          "n_single": 10
+        }
+      ]
+    },
+    "skew15_grid": {
+      "description": "Grid target photographed at 15 degrees tilt.",
+      "ppi": 140,
+      "rotation_deg": -4,
+      "tilt_deg": 15,
+      "tilt_axis_deg": 100,
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.0,
+          "color": "orange"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            0.1,
+            -0.2
+          ],
+          "spread_in": 1.2,
+          "n_single": 10
+        }
+      ]
+    },
+    "merged_pairs": {
+      "description": "4 merged pairs (separations 0.5-1.0 bullet diameters) plus 4 singles; 12 holes.",
+      "ppi": 220,
+      "rotation_deg": 2,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "spread_in": 1.4,
+          "n_single": 4,
+          "merged_pairs": [
+            0.5,
+            0.65,
+            0.8,
+            1.0
+          ],
+          "min_sep_d": 2.2
+        }
+      ]
+    },
+    "ragged_10x7": {
+      "description": "AC-9: 7 distinct holes plus one ragged blob holding 3 shots; 10 shots in total.",
+      "ppi": 200,
+      "rotation_deg": -3,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "offset_from_aim_in": [
+            0.1,
+            0.1
+          ],
+          "spread_in": 1.4,
+          "n_single": 7,
+          "ragged": [
+            3
+          ],
+          "min_sep_d": 2.2
+        }
+      ]
+    },
+    "black_bull_light_holes": {
+      "description": "Holes inside a 3 in black bull show light cores.",
+      "ppi": 200,
+      "rotation_deg": 5,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "bull": {
+        "center_in": [
+          4.25,
+          6.5
+        ],
+        "diameter_in": 3.0
+      },
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "offset_from_aim_in": [
+            0.1,
+            0.1
+          ],
+          "spread_in": 0.9,
+          "n_single": 8
+        }
+      ]
+    },
+    "splatter": {
+      "description": "Splatter-reactive target: fluorescent ring around every hole.",
+      "ppi": 220,
+      "rotation_deg": -2,
+      "splatter": true,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "blue"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "spread_in": 1.2,
+          "n_single": 6,
+          "min_sep_d": 3.4
+        }
+      ]
+    },
+    "circle_tilt_warn": {
+      "description": "Circle reference photographed at 14 degrees tilt (reference sits off-center); projected circle axis ratio ~0.95.",
+      "ppi": 180,
+      "rotation_deg": 3,
+      "tilt_deg": 14,
+      "tilt_axis_deg": 0,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "spread_in": 0.7,
+          "n_single": 5
+        }
+      ]
+    },
+    "no_reference": {
+      "description": "No printed reference of any kind (the aim mark is a diamond, so no circle can be proposed); the user must mark one manually.",
+      "ppi": 180,
+      "rotation_deg": 3,
+      "reference": null,
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.0
+          ],
+          "diameter_in": 1.0,
+          "shape": "diamond",
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.0
+          ],
+          "offset_from_aim_in": [
+            0.2,
+            -0.1
+          ],
+          "spread_in": 0.7,
+          "n_single": 5
+        }
+      ]
+    },
+    "multi_dot_target": {
+      "description": "P-08: three aim dots on one sheet (blue dot, green diamond, orange dot), three 5-shot groups.",
+      "ppi": 200,
+      "rotation_deg": 2,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            1.9,
+            6.0
+          ],
+          "diameter_in": 1.0,
+          "color": "blue"
+        },
+        {
+          "center_in": [
+            4.25,
+            6.0
+          ],
+          "diameter_in": 1.0,
+          "shape": "diamond",
+          "color": "green"
+        },
+        {
+          "center_in": [
+            6.6,
+            6.0
+          ],
+          "diameter_in": 1.0,
+          "color": "orange"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            1.9,
+            6.0
+          ],
+          "offset_from_aim_in": [
+            0.15,
+            0.1
+          ],
+          "spread_in": 0.5,
+          "n_single": 5
+        },
+        {
+          "aim_in": [
+            4.25,
+            6.0
+          ],
+          "offset_from_aim_in": [
+            -0.1,
+            -0.15
+          ],
+          "spread_in": 0.5,
+          "n_single": 5
+        },
+        {
+          "aim_in": [
+            6.6,
+            6.0
+          ],
+          "offset_from_aim_in": [
+            0.0,
+            0.2
+          ],
+          "spread_in": 0.5,
+          "n_single": 5
+        }
+      ]
+    },
+    "high_right_group": {
+      "description": "Coordinate-convention seam: the group sits 1.2 in right of and 0.9 in above the aim dot; no rotation.",
+      "ppi": 200,
+      "rotation_deg": 0,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.0
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.0
+          ],
+          "offset_from_aim_in": [
+            1.2,
+            0.9
+          ],
+          "spread_in": 1.0,
+          "n_single": 10
+        }
+      ]
+    },
+    "hires_wipe_decoys": {
+      "description": "380 ppi (13.5 MP, exercises the 200 ppi / 4000 px working-image downscale): bullet-wipe rings on most holes, 4 hole-sized dirt marks above the 0.35*A1 area floor plus 6 tiny specks, 1 in circle reference.",
+      "ppi": 380,
+      "rotation_deg": -5,
+      "wipe_prob": 0.7,
+      "n_specks": 6,
+      "n_decoys": 4,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "offset_from_aim_in": [
+            0.1,
+            -0.1
+          ],
+          "spread_in": 1.2,
+          "n_single": 8,
+          "min_sep_d": 2.2
+        }
+      ]
+    },
+    "close_holes_tight_pair": {
+      "description": "Singles only 1.3 d apart (outside any composite), one 0.4 d merged pair, bullet wipe on some holes.",
+      "ppi": 240,
+      "rotation_deg": 3,
+      "wipe_prob": 0.3,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.0,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "spread_in": 0.9,
+          "n_single": 6,
+          "merged_pairs": [
+            0.4
+          ],
+          "min_sep_d": 1.3
+        }
+      ]
+    },
+    "black_dot_mixed": {
+      "description": "1.5 in black aim dot: holes wholly on it render light, holes wholly off it render dark; none straddles the edge.",
+      "ppi": 200,
+      "rotation_deg": 2,
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 1.0,
+        "center_in": [
+          1.5,
+          1.5
+        ]
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            4.25,
+            6.5
+          ],
+          "diameter_in": 1.5,
+          "color": "black"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            6.5
+          ],
+          "spread_in": 1.1,
+          "n_single": 8
+        }
+      ]
+    },
+    "black_grid_light_holes_qr": {
+      "description": "real_01 traits: grey paper, black 1 in grid, orange bull inside a black ring, light-core holes with a touching pair, QR code, printed text and a date line, heavy shadow wrinkles.",
+      "ppi": 170,
+      "rotation_deg": 3,
+      "tilt_deg": 6,
+      "tilt_axis_deg": 30,
+      "jpeg_quality": 85,
+      "paper_bgr": [
+        176,
+        180,
+        184
+      ],
+      "hole_style": "light_core",
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10,
+        "line_color": "black"
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            5.5,
+            5.5
+          ],
+          "diameter_in": 1.5,
+          "color": "orange"
+        }
+      ],
+      "overlay_marks": [
+        {
+          "kind": "ring",
+          "center_in": [
+            5.5,
+            5.5
+          ],
+          "diameter_in": 3.2,
+          "thickness_in": 0.03,
+          "color": "black"
+        }
+      ],
+      "print_decoys": [
+        {
+          "kind": "qr",
+          "center_in": [
+            7.2,
+            9.3
+          ],
+          "size_in": 1.1
+        },
+        {
+          "kind": "text",
+          "text": "BYALLEN.COM",
+          "center_in": [
+            6.35,
+            9.3
+          ],
+          "height_in": 0.16,
+          "angle_deg": -90,
+          "color": "red"
+        },
+        {
+          "kind": "text",
+          "text": "Date",
+          "center_in": [
+            6.4,
+            0.95
+          ],
+          "height_in": 0.22,
+          "color": "black"
+        }
+      ],
+      "wrinkles": [
+        {
+          "p0_in": [
+            0.5,
+            3.2
+          ],
+          "p1_in": [
+            8.0,
+            2.6
+          ],
+          "width_in": 0.35,
+          "strength": 0.35
+        },
+        {
+          "p0_in": [
+            1.0,
+            7.7
+          ],
+          "p1_in": [
+            7.0,
+            7.2
+          ],
+          "width_in": 0.3,
+          "strength": 0.3
+        },
+        {
+          "p0_in": [
+            1.0,
+            4.3
+          ],
+          "p1_in": [
+            7.0,
+            4.7
+          ],
+          "width_in": 0.25,
+          "strength": 0.25
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            5.5,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            -1.6,
+            -0.4
+          ],
+          "spread_in": 1.1,
+          "n_single": 8,
+          "merged_pairs": [
+            0.7
+          ],
+          "min_sep_d": 2.0
+        }
+      ]
+    },
+    "red_grid_band_light_diamond": {
+      "description": "real_02 traits: white paper, red 1 in grid with a thick red vertical band, orange sticker disc with black diamond and ring, light-core holes on both the band and white paper, a ragged cluster of 3, printed footer text.",
+      "ppi": 160,
+      "rotation_deg": -2,
+      "tilt_deg": 7,
+      "tilt_axis_deg": 100,
+      "jpeg_quality": 88,
+      "hole_style": "light_core",
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10,
+        "line_color": "red",
+        "band": {
+          "orientation": "vertical",
+          "center_in": 3.5,
+          "width_in": 0.55
+        }
+      },
+      "aim_dots": [
+        {
+          "center_in": [
+            3.5,
+            7.9
+          ],
+          "diameter_in": 2.6,
+          "color": "orange"
+        }
+      ],
+      "overlay_marks": [
+        {
+          "kind": "diamond",
+          "center_in": [
+            3.5,
+            7.9
+          ],
+          "diameter_in": 0.9,
+          "color": "black"
+        },
+        {
+          "kind": "ring",
+          "center_in": [
+            3.5,
+            7.9
+          ],
+          "diameter_in": 1.6,
+          "thickness_in": 0.02,
+          "color": "black"
+        }
+      ],
+      "print_decoys": [
+        {
+          "kind": "text",
+          "text": "GunFun Targets",
+          "center_in": [
+            4.25,
+            10.78
+          ],
+          "height_in": 0.2,
+          "color": "red"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            3.5,
+            7.9
+          ],
+          "offset_from_aim_in": [
+            0.5,
+            2.3
+          ],
+          "spread_in": 1.0,
+          "n_single": 4,
+          "ragged": [
+            3
+          ],
+          "min_sep_d": 2.2
+        }
+      ]
+    },
+    "green_grid_upside_down_staples": {
+      "description": "real_03 traits: green grid with a thick band, sheet rotated 180 degrees, black diamond aim, staples, printed labels, light-core holes.",
+      "ppi": 150,
+      "rotation_deg": 180,
+      "tilt_deg": 5,
+      "tilt_axis_deg": 45,
+      "jpeg_quality": 90,
+      "hole_style": "light_core",
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10,
+        "line_color": "green",
+        "band": {
+          "orientation": "vertical",
+          "center_in": 4.25,
+          "width_in": 0.45
+        }
+      },
+      "overlay_marks": [
+        {
+          "kind": "diamond",
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.2,
+          "color": "black"
+        }
+      ],
+      "staples": [
+        {
+          "center_in": [
+            6.75,
+            2.0
+          ],
+          "length_in": 0.5,
+          "angle_deg": 15
+        },
+        {
+          "center_in": [
+            1.75,
+            9.0
+          ],
+          "length_in": 0.5,
+          "angle_deg": 100
+        },
+        {
+          "center_in": [
+            7.75,
+            3.0
+          ],
+          "length_in": 0.5,
+          "angle_deg": 70
+        }
+      ],
+      "print_decoys": [
+        {
+          "kind": "text",
+          "text": "1L",
+          "center_in": [
+            1.25,
+            10.78
+          ],
+          "height_in": 0.25,
+          "color": "green"
+        },
+        {
+          "kind": "text",
+          "text": "2L",
+          "center_in": [
+            2.25,
+            10.78
+          ],
+          "height_in": 0.25,
+          "color": "green"
+        },
+        {
+          "kind": "text",
+          "text": "1R",
+          "center_in": [
+            5.25,
+            10.78
+          ],
+          "height_in": 0.25,
+          "color": "green"
+        },
+        {
+          "kind": "text",
+          "text": "2R",
+          "center_in": [
+            6.25,
+            10.78
+          ],
+          "height_in": 0.25,
+          "color": "green"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            0.4,
+            -0.3
+          ],
+          "spread_in": 1.8,
+          "n_single": 12,
+          "min_sep_d": 2.0
+        }
+      ]
+    },
+    "curved_green_grid": {
+      "description": "Mildly curved sheet (truth non_planar true): grid lines bow by 0.3 in; green grid, black diamond aim.",
+      "ppi": 150,
+      "rotation_deg": 0,
+      "tilt_deg": 4,
+      "tilt_axis_deg": 10,
+      "jpeg_quality": 90,
+      "non_planar": {
+        "amplitude_in": 0.3
+      },
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10,
+        "line_color": "green"
+      },
+      "overlay_marks": [
+        {
+          "kind": "diamond",
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.2,
+          "color": "black"
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "offset_from_aim_in": [
+            0.3,
+            0.2
+          ],
+          "spread_in": 1.5,
+          "n_single": 8
+        }
+      ]
+    },
+    "cardboard_sticker_ragged": {
+      "description": "real_06 traits: orange sticker disc (3 in circle reference) on corrugated cardboard with creases and shadows; a ragged 4-shot center, light-core holes on the disc and dark holes on the cardboard, a dirt-dot decoy.",
+      "ppi": 160,
+      "rotation_deg": 4,
+      "jpeg_quality": 88,
+      "background": "cardboard",
+      "n_creases": 6,
+      "n_decoys": 1,
+      "hole_style": "mixed_disc",
+      "reference": {
+        "kind": "circle",
+        "diameter_in": 3.0,
+        "center_in": [
+          4.25,
+          5.5
+        ],
+        "allow_holes": true,
+        "rim_clear_in": 0.35
+      },
+      "overlay_marks": [
+        {
+          "kind": "ring",
+          "center_in": [
+            4.25,
+            5.5
+          ],
+          "diameter_in": 1.8,
+          "thickness_in": 0.02,
+          "color": "black"
+        },
+        {
+          "kind": "line",
+          "p0_in": [
+            2.8,
+            5.5
+          ],
+          "p1_in": [
+            3.3,
+            5.5
+          ],
+          "thickness_in": 0.02,
+          "color": "black"
+        },
+        {
+          "kind": "line",
+          "p0_in": [
+            5.2,
+            5.5
+          ],
+          "p1_in": [
+            5.7,
+            5.5
+          ],
+          "thickness_in": 0.02,
+          "color": "black"
+        },
+        {
+          "kind": "line",
+          "p0_in": [
+            4.25,
+            3.9
+          ],
+          "p1_in": [
+            4.25,
+            4.4
+          ],
+          "thickness_in": 0.02,
+          "color": "black"
+        },
+        {
+          "kind": "line",
+          "p0_in": [
+            4.25,
+            6.6
+          ],
+          "p1_in": [
+            4.25,
+            7.1
+          ],
+          "thickness_in": 0.02,
+          "color": "black"
+        }
+      ],
+      "wrinkles": [
+        {
+          "p0_in": [
+            0.5,
+            1.5
+          ],
+          "p1_in": [
+            8.0,
+            1.2
+          ],
+          "width_in": 0.3,
+          "strength": 0.4
+        },
+        {
+          "p0_in": [
+            0.5,
+            9.5
+          ],
+          "p1_in": [
+            8.0,
+            9.8
+          ],
+          "width_in": 0.3,
+          "strength": 0.35
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            4.25,
+            5.5
+          ],
+          "spread_in": 2.6,
+          "n_single": 7,
+          "ragged": [
+            4
+          ],
+          "min_sep_d": 2.2,
+          "ragged_at_center": true
+        }
+      ]
+    },
+    "tape_cross_multi_aim": {
+      "description": "real_05 traits: green grid, small caliber (0.172 in), two black diamonds and a user-made blue tape cross with a dot as aim marks, three groups on one sheet, light-core holes.",
+      "ppi": 200,
+      "rotation_deg": 0,
+      "tilt_deg": 3,
+      "tilt_axis_deg": 60,
+      "jpeg_quality": 90,
+      "bullet_diameter_in": 0.172,
+      "hole_style": "light_core",
+      "reference": {
+        "kind": "grid",
+        "origin_in": [
+          0.25,
+          0.5
+        ],
+        "squares_across": 8,
+        "squares_down": 10,
+        "line_color": "green"
+      },
+      "overlay_marks": [
+        {
+          "kind": "diamond",
+          "center_in": [
+            2.5,
+            3.0
+          ],
+          "diameter_in": 1.0,
+          "color": "black"
+        },
+        {
+          "kind": "diamond",
+          "center_in": [
+            6.2,
+            2.6
+          ],
+          "diameter_in": 1.0,
+          "color": "black"
+        },
+        {
+          "kind": "tape_cross",
+          "center_in": [
+            4.5,
+            7.8
+          ],
+          "arm_in": 0.9,
+          "width_in": 0.22
+        }
+      ],
+      "groups": [
+        {
+          "aim_in": [
+            2.5,
+            3.0
+          ],
+          "offset_from_aim_in": [
+            0.3,
+            0.2
+          ],
+          "spread_in": 0.8,
+          "n_single": 4
+        },
+        {
+          "aim_in": [
+            6.2,
+            2.6
+          ],
+          "offset_from_aim_in": [
+            0.2,
+            -0.3
+          ],
+          "spread_in": 0.8,
+          "n_single": 4
+        },
+        {
+          "aim_in": [
+            4.5,
+            7.8
+          ],
+          "offset_from_aim_in": [
+            0.1,
+            0.1
+          ],
+          "spread_in": 0.9,
+          "n_single": 5
+        }
+      ]
+    }
+  }
+}

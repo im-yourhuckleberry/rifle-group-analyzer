@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Rifles{% endblock %}
+{% block content %}
+<div data-page="rifles-list">
+  <h1>Rifles</h1>
+
+  <section class="card">
+    {% if summaries %}
+    <table>
+      <thead>
+        <tr><th>Rifle</th><th>Cartridge</th><th class="num">Bullet diameter</th><th>Scope</th><th class="num">Loads</th><th>Zero load</th></tr>
+      </thead>
+      <tbody>
+        {% for s in summaries %}
+        <tr>
+          <td><a href="/rifles/{{ s.rifle.id }}">{{ s.rifle.name }}</a></td>
+          <td>{{ s.rifle.cartridge }}</td>
+          <td class="num">{{ "%.3f"|format(s.rifle.bullet_diameter_in) }} in</td>
+          <td>{{ s.rifle.scope or "" }}</td>
+          <td class="num">{{ s.load_count }}</td>
+          <td>{% if s.zero_load_label %}{{ s.zero_load_label }}{% else %}<span class="muted">not set</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No rifles yet. Add one below.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Add a rifle</h2>
+    <form data-form="new-rifle" novalidate>
+      <div class="grid-2">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="cartridge">Cartridge</label>
+          <input type="text" id="cartridge" name="cartridge" list="cartridge-list" maxlength="200" required autocomplete="off">
+          <datalist id="cartridge-list"></datalist>
+          <span class="hint">Pick from the list to fill the bullet diameter, or type your own.</span>
+        </div>
+        <div class="field">
+          <label for="bullet_diameter_in">Bullet diameter (in)</label>
+          <select id="bullet_diameter_in" name="bullet_diameter_in">
+            <option value="">From the cartridge</option>
+            {% for d in diameters %}<option value="{{ "%.3f"|format(d) }}">{{ "%.3f"|format(d) }} in</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="scope">Scope</label>
+          <input type="text" id="scope" name="scope" maxlength="200">
+          <span class="hint">Mil/mil with 0.1 mil clicks is assumed.</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" maxlength="10000"></textarea>
+      </div>
+      <div class="actions"><button type="submit">Add rifle</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/rifles.js"></script>
+{% endblock %}

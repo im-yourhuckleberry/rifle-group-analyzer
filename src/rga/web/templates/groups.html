@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Groups · Rifle Group Analyzer{% endblock %}
+{% block content %}
+<div data-page="groups" class="stack">
+  <h1>Groups</h1>
+
+  <section class="card stack">
+    <div class="row">
+      <details data-filters-panel class="grow">
+        <summary>Filters{% if active_count %} ({{ active_count }} active){% endif %}</summary>
+        <form method="get" action="/groups" data-form="group-filters" class="stack">
+          <div class="grid-2">
+            <div class="field">
+              <label for="f-rifle">Rifle</label>
+              <select id="f-rifle" name="rifle_id">
+                <option value="">All rifles</option>
+                {% for rifle in options.rifles %}
+                <option value="{{ rifle.id }}"{% if chosen.get('rifle_id') == rifle.id|string %} selected{% endif %}>{{ rifle.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-load">Load</label>
+              <select id="f-load" name="load_id">
+                <option value="">All loads</option>
+                {% for load in options.loads %}
+                {% set hidden = chosen.get('rifle_id') and chosen.get('rifle_id') != load.rifle_id|string %}
+                <option value="{{ load.id }}" data-rifle-id="{{ load.rifle_id }}"{% if chosen.get('load_id') == load.id|string %} selected{% endif %}{% if hidden %} hidden disabled{% endif %}>{{ load.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-distance">Distance</label>
+              <select id="f-distance" name="distance_yd">
+                <option value="">Any distance</option>
+                {% for yd in options.distances %}
+                <option value="{{ yd }}"{% if chosen.get('distance_yd') == yd|string %} selected{% endif %}>{{ yd }} yd</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-position">Position</label>
+              <select id="f-position" name="position">
+                <option value="">Any position</option>
+                {% for value, label in position_labels.items() %}
+                <option value="{{ value }}"{% if chosen.get('position') == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-suppressor">Suppressor</label>
+              <select id="f-suppressor" name="suppressor">
+                <option value="">Any</option>
+                <option value="none"{% if chosen.get('suppressor') == 'none' %} selected{% endif %}>None</option>
+                <option value="yes"{% if chosen.get('suppressor') == 'yes' %} selected{% endif %}>Suppressed</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-suppressor-id">Which suppressor</label>
+              <select id="f-suppressor-id" name="suppressor_id">
+                <option value="">Any suppressor</option>
+                {% for can in options.suppressors %}
+                <option value="{{ can.id }}"{% if chosen.get('suppressor_id') == can.id|string %} selected{% endif %}>{{ can.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-status">Status</label>
+              <select id="f-status" name="status">
+                <option value="">Any status</option>
+                {% for value, label in status_labels.items() %}
+                <option value="{{ value }}"{% if chosen.get('status') == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-purpose">Purpose</label>
+              <select id="f-purpose" name="purpose">
+                <option value="">Any purpose</option>
+                {% for value, label in purpose_labels.items() %}
+                <option value="{{ value }}"{% if chosen.get('purpose') == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-from">From date</label>
+              <input type="date" id="f-from" name="date_from" value="{{ chosen.get('date_from', '') }}">
+            </div>
+            <div class="field">
+              <label for="f-to">To date</label>
+              <input type="date" id="f-to" name="date_to" value="{{ chosen.get('date_to', '') }}">
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit">Apply filters</button>
+            <a class="button secondary" href="/groups" data-clear-filters>Clear filters</a>
+          </div>
+        </form>
+      </details>
+      {% if active_count %}<a class="button secondary" href="/groups" data-clear-active>Clear</a>{% endif %}
+    </div>
+  </section>
+
+  <section class="card stack">
+    <h2>{{ listing.total }} group{% if listing.total != 1 %}s{% endif %}{% if filtered %} match{% if listing.total == 1 %}es{% endif %}{% endif %}</h2>
+    {% if listing.rows %}
+    <p class="muted">Newest first. Showing {{ first_row }} to {{ first_row + listing.rows|length - 1 }}. Click a row to open the group. Sizes are extreme spread, center to center.</p>
+    <table data-groups-table>
+      <thead>
+        <tr>
+          <th>When</th><th>Rifle</th><th>Load · lot</th><th class="num">Distance</th><th>Position</th><th>Suppressor</th>
+          <th class="num">Shots</th><th>Extreme spread (in · MOA · mil)</th><th>Status</th><th>Purpose</th><th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in listing.rows %}
+        {% set g = row.group %}
+        <tr class="clickable" data-group-id="{{ g.id }}" data-href="/groups/{{ g.id }}">
+          <td><a href="/groups/{{ g.id }}">{{ g.shot_date }}{% if g.shot_time %} {{ g.shot_time[:5] }}{% endif %}</a></td>
+          <td>{{ row.rifle_name }}</td>
+          <td>{{ row.load_label }} <span class="muted">· {{ row.lot_code }}</span></td>
+          <td class="num">{{ g.distance_yd }} yd</td>
+          <td>{{ position_labels.get(g.position, g.position) }}</td>
+          <td>{% if g.suppressor %}Suppressed{% if row.suppressor_name %} ({{ row.suppressor_name }}){% endif %}{% else %}None{% endif %}</td>
+          <td class="num">{{ row.shot_count }} of {{ g.shots_expected }}</td>
+          <td>{% if row.size %}{{ "%.2f"|format(row.size[1]) }} in · {{ "%.2f"|format(row.size[2]) }} MOA · {{ "%.2f"|format(row.size[3]) }} mil{% if row.size[4] %} <span class="badge warn">includes estimated shots</span>{% endif %}{% else %}<span class="muted">none yet</span>{% endif %}</td>
+          <td><span class="badge{% if g.status != 'final' %} warn{% endif %}">{{ status_labels.get(g.status, g.status) }}</span></td>
+          <td>{{ row.purpose_label }}</td>
+          <td class="muted">{{ row.notes_snippet }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="actions" data-pager>
+      {% if previous_link %}<a class="button secondary" href="{{ previous_link }}" rel="prev">Newer groups</a>{% endif %}
+      <span class="muted">Page {{ listing.page }} of {{ listing.pages }}</span>
+      {% if next_link %}<a class="button secondary" href="{{ next_link }}" rel="next">Older groups</a>{% endif %}
+    </div>
+    {% elif listing.page > 1 and listing.total %}
+    <p class="notice info">There are no groups on this page. <a href="{{ previous_link or '/groups' }}">Back to the last page</a>.</p>
+    {% elif filtered %}
+    <p class="muted">No groups match these filters. <a href="/groups">Clear filters</a>.</p>
+    {% else %}
+    <p class="muted">No groups yet. Add one from a <a href="/rifles">rifle's page</a>.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/groups_list.js"></script>
+{% endblock %}

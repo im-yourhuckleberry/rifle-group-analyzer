@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Settings · Rifle Group Analyzer{% endblock %}
+{% block content %}
+<div data-page="settings">
+  <h1>Settings</h1>
+
+  <section class="card">
+    <h2>Mode</h2>
+    <div class="mode-panel">
+      <div class="mode-switch" role="radiogroup" aria-label="Mode">
+        <label class="mode-option current"><input type="radio" name="ui-mode" value="offline" checked> Offline</label>
+        <label class="mode-option unavailable" title="Online mode — coming later"><input type="radio" name="ui-mode" value="online" disabled aria-describedby="mode-online-note"> Online</label>
+        <span id="mode-online-note" class="visually-hidden">Online mode — coming later</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card stack" id="share-settings" aria-label="Share settings" data-state="{{ state_json }}">
+    <h2>Share</h2>
+    <fieldset class="share-layers">
+      <legend>Layers that start checked when you open a group's Share card</legend>
+      {% for key, label in share_layers %}
+      <label><input type="checkbox" data-share-default="{{ key }}"{% if share_defaults[key] %} checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </fieldset>
+    <p class="hint">A layer a group cannot show (no photo, too few shots, a short zeroing group) stays off on that group's card whatever is saved here.</p>
+    <div class="actions"><button type="button" id="save-share-defaults">Save</button></div>
+    <p class="muted" id="share-defaults-status" aria-live="polite"></p>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/settings.js"></script>
+{% endblock %}

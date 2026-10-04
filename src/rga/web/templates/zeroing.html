@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "suppressor_picker.html" import suppressor_picker %}
+{% block title %}Zeroing{% endblock %}
+{% block content %}
+<div id="zeroing-root" data-zero-id="{{ zero_id }}" class="stack">
+  <h1>Zeroing</h1>
+  <p class="muted" id="zero-summary">Loading...</p>
+  <ol class="stepper" id="stepper" aria-label="Zeroing steps"></ol>
+
+  <section class="card stack" id="advice-card" aria-label="Advice" hidden>
+    <h2>Advice</h2>
+    <p id="advice-message"></p>
+    <p id="advice-correction" class="shot-counter" hidden></p>
+    <div class="stat-grid" id="advice-stats" hidden></div>
+    <p class="muted" id="advice-poi" hidden></p>
+  </section>
+
+  <section class="card stack" id="groups-card" aria-label="Zeroing groups">
+    <h2>Groups</h2>
+    <p class="muted" id="groups-empty">No groups are linked to this zero yet.</p>
+    <table id="groups-table" hidden>
+      <thead>
+        <tr><th>Group</th><th>Step</th><th>Status</th><th class="num">Shots</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="groups-body"></tbody>
+    </table>
+  </section>
+
+  <section class="card stack" id="add-group-card" aria-label="Add a group" hidden>
+    <h2 id="add-group-title">Add a group</h2>
+    <p class="muted" id="add-group-hint"></p>
+    <div class="field">
+      <label for="ag-photo">Target photo (optional)</label>
+      <input id="ag-photo" type="file" accept="image/*">
+      <span class="hint">Choosing a photo fills in the date and time it was taken.</span>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="ag-date">Date</label>
+        <input id="ag-date" type="date">
+        <span class="hint" id="ag-date-source">entered</span>
+      </div>
+      <div class="field">
+        <label for="ag-time">Time (optional)</label>
+        <input id="ag-time" type="time" step="60">
+      </div>
+      <div class="field">
+        <span class="label">Distance</span>
+        <p id="ag-distance">Distance: 100 yd</p>
+        <span class="hint">Zeroing is always shot at 100 yd.</span>
+      </div>
+      <div class="field">
+        <label for="ag-position">Position</label>
+        <select id="ag-position">
+          {% for value, label in position_labels.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        {{ suppressor_picker("ag", suppressors, false, none) }}
+      </div>
+      <div class="field">
+        <label for="ag-shots">Shots to fire</label>
+        <input id="ag-shots" type="number" min="1" max="100" step="1" value="10">
+      </div>
+      <div class="field">
+        <label for="ag-lot">Lot code</label>
+        <input id="ag-lot" type="text" maxlength="60" autocomplete="off">
+      </div>
+    </div>
+    <div class="field">
+      <label for="ag-notes">Notes (optional)</label>
+      <textarea id="ag-notes" rows="2"></textarea>
+    </div>
+    <div class="actions">
+      <button type="button" id="ag-create">Create group</button>
+    </div>
+    <p id="ag-next" class="notice info" hidden></p>
+  </section>
+
+  <section class="card stack" id="dialed-card" aria-label="Dialed correction" hidden>
+    <h2>Dialed correction</h2>
+    <p class="muted">Enter what you actually dialed, in whole 0.1 mil clicks (up and right are positive).</p>
+    <div class="grid-2">
+      <div class="field">
+        <label for="dl-up">Elevation, up (mil)</label>
+        <input id="dl-up" type="number" step="0.1" value="0">
+      </div>
+      <div class="field">
+        <label for="dl-right">Windage, right (mil)</label>
+        <input id="dl-right" type="number" step="0.1" value="0">
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" id="dl-save">Record dialed correction</button>
+    </div>
+  </section>
+
+  <section class="card stack" id="dot-card" aria-label="Dot size" hidden>
+    <h2>Dot size</h2>
+    <p id="dot-suggestion"></p>
+    <div class="grid-2">
+      <div class="field">
+        <label for="dot-size">Dot size (in)</label>
+        <input id="dot-size" type="number" min="0.1" max="10" step="0.05">
+        <span class="hint" id="dot-standard"></span>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" id="dot-save">Set the dot and complete the zero</button>
+    </div>
+  </section>
+
+  <section class="card stack" id="check-card" aria-label="Zero check" hidden>
+    <h2>Zero check</h2>
+    <p class="muted">Fire 1 or 2 shots at 100 yd, finalize the group, then judge it against the dot.</p>
+    <div class="field">
+      <label for="ck-group">Finalized zero-check group</label>
+      <select id="ck-group"></select>
+      <span class="hint" id="ck-hint"></span>
+    </div>
+    <div class="actions">
+      <button type="button" id="ck-run">Run the zero check</button>
+    </div>
+    <div id="ck-result" hidden></div>
+    <ul id="ck-history"></ul>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/zeroing.js"></script>
+{% endblock %}
