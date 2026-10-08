@@ -1222,7 +1222,7 @@ def browser_page(tmp_path):
             connection.close()
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": 1400, "height": 1000})
+            page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
             problems: list[str] = []
             page.on("pageerror", lambda error: problems.append(str(error)))
             page.on(
@@ -2302,7 +2302,7 @@ def _live_review(
             connection.close()
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": 1400, "height": 1000})
+            page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
             problems: list[str] = []
             page.on("pageerror", lambda error: problems.append(str(error)))
             page.on(
@@ -2893,7 +2893,7 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000})
+                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
                 problems: list[str] = []
                 page.on("pageerror", lambda error: problems.append(str(error)))
                 photo_id, truth = _upload_confirmed(page, str(server), "wrong")
@@ -2986,7 +2986,7 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000})
+                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
                 photo_id, _ = _upload_confirmed(page, str(server), "right")
                 connection = connect(settings.db_path)
                 try:
@@ -3020,7 +3020,7 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000})
+                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
                 requests: list[str] = []
                 page.on("request", lambda r: requests.append(f"{r.method} {r.url}"))
                 photo_id, _ = _upload_confirmed(page, str(server), "right")

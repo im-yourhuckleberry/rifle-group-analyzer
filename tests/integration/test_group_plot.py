@@ -795,7 +795,7 @@ def browser_world():
         browser = playwright.chromium.launch()
         try:
             world = make_world(connection)
-            page = browser.new_page(viewport={"width": 1300, "height": 1000})
+            page = browser.new_page(viewport={"width": 1300, "height": 1000}, reduced_motion="reduce")
             problems: list[str] = []
             page.on("pageerror", lambda error: problems.append(str(error)))
             page.on(

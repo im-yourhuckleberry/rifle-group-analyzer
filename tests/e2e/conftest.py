@@ -49,9 +49,16 @@ def server() -> Iterator[object]:
 
 
 @pytest.fixture
-def app(server, _browser, tmp_path) -> Iterator[App]:
-    """An `App` on a fresh context; fails the test if the page logged a JavaScript error."""
-    context = _browser.new_context(viewport=VIEWPORT)
+def app(server, _browser, tmp_path, request) -> Iterator[App]:
+    """An `App` on a fresh context; fails the test if the page logged a JavaScript error.
+
+    The context prefers reduced motion, so zoom changes land in one frame and pointer geometry is
+    exact right after a click; a test marked `motion` gets the animated behaviour instead.
+    """
+    motion = request.node.get_closest_marker("motion") is not None
+    context = _browser.new_context(
+        viewport=VIEWPORT, reduced_motion="no-preference" if motion else "reduce"
+    )
     context.set_default_timeout(DEFAULT_TIMEOUT_MS)
     page = context.new_page()
     console = ConsoleCollector(page)

@@ -32,7 +32,8 @@ function clamp(value, low, high) {
  * callbacks onAdd(xIn, yIn), onSelect(index|null), onMoveStart(index), onMove(index, xIn, yIn),
  * onAimClick(xPx, yPx), onRegion(x0, y0, x1, y1, done) and onView(zoomLevel).
  * A click on empty space deselects when a shot is selected and adds a shot otherwise. A dragged
- * shot keeps the offset from where it was grabbed, so it never jumps under the pointer.
+ * shot keeps the offset from where it was grabbed, so it never jumps under the pointer. In aim mode
+ * the click counts on release, and a drag pans instead of placing the aim.
  * `render({ shots, selected, aim, region, aimCandidates, activeCandidate })` draws everything;
  * `aimCandidates` are `{ x_in, y_in, label }` suggestions drawn as numbered rings, the one at
  * `activeCandidate` emphasised. Rings never take pointer input.
@@ -146,19 +147,14 @@ export function createEditor(svg, options) {
     if (event.button !== 0) return;
     const point = toWorking(event);
     svg.setPointerCapture(event.pointerId);
-    if (mode === "aim") {
-      options.onAimClick(point.x, point.y);
-      drag = null;
-      return;
-    }
     if (mode === "region") {
       drag = { kind: "region", start: point };
       return;
     }
-    const index = shotAt(point);
+    const index = mode === "aim" ? null : shotAt(point);
     if (index === null) {
       drag = {
-        kind: "empty",
+        kind: mode === "aim" ? "aim" : "empty",
         start: point,
         clientStart: { x: event.clientX, y: event.clientY },
         pan: zoom.startPan(event.clientX, event.clientY),
@@ -179,7 +175,7 @@ export function createEditor(svg, options) {
 
   svg.addEventListener("pointermove", (event) => {
     if (!drag) return;
-    if (drag.kind === "empty") {
+    if (drag.kind === "empty" || drag.kind === "aim") {
       const dx = event.clientX - drag.clientStart.x;
       const dy = event.clientY - drag.clientStart.y;
       if (!drag.panning && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
@@ -216,7 +212,10 @@ export function createEditor(svg, options) {
     const point = toWorking(event);
     const finished = drag;
     drag = null;
-    if (finished.kind === "shot" && finished.moved) {
+    if (finished.pan) finished.pan.end();
+    if (finished.kind === "aim") {
+      if (!finished.panning) options.onAimClick(point.x, point.y);
+    } else if (finished.kind === "shot" && finished.moved) {
       moveShot(finished, point);
     } else if (finished.kind === "empty" && !finished.panning) {
       if (state.selected !== null) options.onSelect(null);
@@ -231,6 +230,7 @@ export function createEditor(svg, options) {
   }
   svg.addEventListener("pointerup", finish);
   svg.addEventListener("pointercancel", () => {
+    if (drag && drag.pan) drag.pan.end();
     drag = null;
   });
 
@@ -243,14 +243,17 @@ export function createEditor(svg, options) {
     },
     setMode(next) {
       mode = next;
+      if (drag && drag.pan) drag.pan.end();
       drag = null;
     },
     zoomBy: zoom.zoomBy,
-    fit: zoom.fit,
-    zoomToRegion(region) {
+    fit() {
+      zoom.fit({ animate: true });
+    },
+    zoomToRegion(region, { animate = false } = {}) {
       const [x0, y0, x1, y1] = region;
       const w = Math.max((x1 - x0) * REGION_PAD, ((y1 - y0) * REGION_PAD) / aspect);
-      zoom.setView({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * aspect) / 2, w });
+      zoom.setView({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * aspect) / 2, w }, { animate });
     },
     zoomLevel: zoom.zoomLevel,
     getView: zoom.getView,

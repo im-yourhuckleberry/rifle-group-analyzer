@@ -26,6 +26,7 @@ addopts = "--disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhos
 markers = [
     "accuracy: detection-accuracy suite against the synthetic catalog (P-11 thresholds)",
     "e2e: Playwright journeys through the real UI (applied automatically under tests/e2e)",
+    "motion: e2e test that runs with animations on (the default context prefers reduced motion)",
 ]
 
 [tool.ruff]

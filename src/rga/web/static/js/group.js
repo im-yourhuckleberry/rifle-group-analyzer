@@ -81,7 +81,7 @@ function wireZoom() {
   zoom.fit();
   document.getElementById("plot-zoom-in").addEventListener("click", () => zoom.zoomBy(BUTTON_ZOOM_STEP));
   document.getElementById("plot-zoom-out").addEventListener("click", () => zoom.zoomBy(1 / BUTTON_ZOOM_STEP));
-  document.getElementById("plot-zoom-fit").addEventListener("click", () => zoom.fit());
+  document.getElementById("plot-zoom-fit").addEventListener("click", () => zoom.fit({ animate: true }));
 
   let pan = null;
   plot.addEventListener("pointerdown", (event) => {
@@ -94,6 +94,7 @@ function wireZoom() {
     if (pan) pan.move(event.clientX, event.clientY);
   });
   const stop = () => {
+    if (pan) pan.end();
     pan = null;
     PLOT_FRAME.classList.remove("is-panning");
   };

@@ -349,6 +349,7 @@ overlay.addEventListener("pointerup", (event) => {
   const finished = gesture;
   gesture = null;
   viewer.classList.remove("is-dragging");
+  if (finished && finished.pan) finished.pan.end();
   if (!finished || finished.moved || finished.kind !== "empty" || !state.manual) return;
   const limit = isGrid() ? GRID_MARKS : CIRCLE_MAX_MARKS;
   if (state.marks.length >= limit) return;
@@ -360,20 +361,21 @@ overlay.addEventListener("pointerup", (event) => {
 });
 
 overlay.addEventListener("pointercancel", () => {
+  if (gesture && gesture.pan) gesture.pan.end();
   gesture = null;
   viewer.classList.remove("is-dragging");
 });
 
 el("zoom-in-button").addEventListener("click", () => zoom.zoomBy(BUTTON_ZOOM_STEP));
 el("zoom-out-button").addEventListener("click", () => zoom.zoomBy(1 / BUTTON_ZOOM_STEP));
-el("zoom-fit-button").addEventListener("click", () => zoom.fit());
+el("zoom-fit-button").addEventListener("click", () => zoom.fit({ animate: true }));
 document.addEventListener("keydown", (event) => {
   const target = event.target;
   if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.key === "+" || event.key === "=") zoom.zoomBy(BUTTON_ZOOM_STEP);
   else if (event.key === "-") zoom.zoomBy(1 / BUTTON_ZOOM_STEP);
-  else if (event.key === "0") zoom.fit();
+  else if (event.key === "0") zoom.fit({ animate: true });
 });
 
 el("find").addEventListener("click", () => guarded(findReference));

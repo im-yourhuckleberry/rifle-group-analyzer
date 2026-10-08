@@ -68,6 +68,14 @@ const els = {
   zoomFit: document.getElementById("zoom-fit-button"),
   zoomRegion: document.getElementById("zoom-region-button"),
   zoomLevel: document.getElementById("zoom-level"),
+  wrap: document.getElementById("editor-wrap"),
+};
+// What a busy button says while its request runs, so a slow detect never looks like a dead page.
+const BUSY_LABELS = {
+  detect: ["Detect holes", "Detecting holes\u2026"],
+  fill: ["Fill shortfall", "Filling\u2026"],
+  save: ["Save", "Saving\u2026"],
+  finalize: ["Finalize", "Finalizing\u2026"],
 };
 
 let storedExpected = server.shots_expected;
@@ -80,6 +88,7 @@ const model = {
   selected: null,
   mode: "edit",
   busy: false,
+  activity: null,
   suggestions: [],
   suggestionIndex: -1,
 };
@@ -215,6 +224,10 @@ function refresh() {
   els.reason.textContent = blocker;
   els.aim.textContent = model.mode === "aim" ? "Click the aim mark" : "Mark aim";
   els.region.textContent = model.mode === "region" ? "Drag a region" : model.region ? "Change region" : "Set region";
+  for (const [key, [idle, working]] of Object.entries(BUSY_LABELS)) {
+    els[key].textContent = model.activity === key ? working : idle;
+  }
+  els.wrap.setAttribute("aria-busy", String(model.activity === "detect" || model.activity === "fill"));
   for (const button of [els.detect, els.fill, els.save, els.aim, els.region]) {
     button.disabled = isFinal || !hasFrame || model.busy;
   }
@@ -410,9 +423,10 @@ function placeAimYourself() {
   else refresh();
 }
 
-async function guarded(action) {
+async function guarded(action, activity = null) {
   if (model.busy) return;
   model.busy = true;
+  model.activity = activity;
   refresh();
   try {
     await action();
@@ -420,6 +434,7 @@ async function guarded(action) {
     failure(error);
   } finally {
     model.busy = false;
+    model.activity = null;
     refresh();
   }
 }
@@ -510,7 +525,7 @@ async function finalizeGroup() {
     await save();
     await apiSend("POST", `/api/groups/${groupId}/finalize`);
     window.location.assign(server.next_url);
-  });
+  }, "finalize");
 }
 
 function referenceUrl() {
@@ -619,13 +634,13 @@ els.expected.addEventListener("change", () => {
   if (Number.isInteger(value) && value >= 1 && value <= MAX_EXPECTED) model.expected = value;
   refresh();
 });
-els.detect.addEventListener("click", () => guarded(() => detect()));
-els.fill.addEventListener("click", () => guarded(fillShortfall));
+els.detect.addEventListener("click", () => guarded(() => detect(), "detect"));
+els.fill.addEventListener("click", () => guarded(fillShortfall, "fill"));
 els.save.addEventListener("click", () =>
   guarded(async () => {
     await save();
     flash("Saved.", true);
-  }),
+  }, "save"),
 );
 els.aim.addEventListener("click", () => setMode("aim"));
 if (hasFrame) els.svg.addEventListener("pointerdown", selectRingAt, true);
@@ -638,7 +653,10 @@ els.undo.addEventListener("click", undo);
 els.zoomIn.addEventListener("click", () => editor && editor.zoomBy(BUTTON_ZOOM_STEP));
 els.zoomOut.addEventListener("click", () => editor && editor.zoomBy(1 / BUTTON_ZOOM_STEP));
 els.zoomFit.addEventListener("click", () => editor && editor.fit());
-els.zoomRegion.addEventListener("click", () => editor && model.region && editor.zoomToRegion(model.region));
+els.zoomRegion.addEventListener(
+  "click",
+  () => editor && model.region && editor.zoomToRegion(model.region, { animate: true }),
+);
 els.finalize.addEventListener("click", finalizeGroup);
 document.addEventListener("keydown", (event) => {
   const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -667,5 +685,5 @@ els.hint.textContent = hasFrame && !isFinal
 refresh();
 if (hasFrame && !isFinal && model.shots.length === 0 && model.rejections.length === 0) {
   // The first detect on opening is the starting point, so Undo does not take it back.
-  guarded(() => detect(true));
+  guarded(() => detect(true), "detect");
 }
