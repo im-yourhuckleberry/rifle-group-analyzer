@@ -17,11 +17,19 @@
   data-review-url="{{ review_url or '' }}"
   data-return-to="{{ return_to }}">
   <div class="grow">
-    <div class="editor-wrap" id="viewer">
-      <img id="photo" src="/api/photos/{{ photo.id }}/image?variant=oriented" alt="Uploaded target photo, {{ photo.width_px }} by {{ photo.height_px }} pixels">
-      <svg id="overlay" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ photo.width_px }} {{ photo.height_px }}" aria-hidden="true"></svg>
+    <div class="zoom-toolbar" role="group" aria-label="Zoom and pan">
+      <button type="button" id="zoom-out-button" class="secondary" aria-label="Zoom out">&minus;</button>
+      <button type="button" id="zoom-in-button" class="secondary" aria-label="Zoom in">+</button>
+      <button type="button" id="zoom-fit-button" class="secondary">Fit</button>
+      <span id="zoom-level" class="zoom-level muted" aria-live="polite">1.0&times;</span>
     </div>
-    <p class="muted" id="viewer-hint">Candidates are drawn on the photo. Choose one in the list, or switch to manual marking.</p>
+    <div class="editor-wrap reference-viewer" id="viewer">
+      <div class="zoom-stage" id="stage">
+        <img id="photo" src="/api/photos/{{ photo.id }}/image?variant=oriented" alt="Uploaded target photo, {{ photo.width_px }} by {{ photo.height_px }} pixels">
+        <svg id="overlay" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ photo.width_px }} {{ photo.height_px }}" aria-hidden="true"></svg>
+      </div>
+    </div>
+    <p class="muted" id="viewer-hint">Candidates are drawn on the photo. Choose one in the list, or switch to manual marking. Scroll to zoom and drag to pan.</p>
   </div>
 
   <aside class="card stack grow">

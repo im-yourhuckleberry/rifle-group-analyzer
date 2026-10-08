@@ -36,12 +36,3 @@
 }
 .aim-suggestion .actions { margin-top: 0.5rem; }
 
-.zoom-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
-}
-.zoom-toolbar button { padding: 0.25rem 0.7rem; min-width: 2.2rem; }
-.zoom-level { min-width: 3.5rem; font-variant-numeric: tabular-nums; }

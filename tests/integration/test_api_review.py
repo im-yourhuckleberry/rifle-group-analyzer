@@ -2715,7 +2715,7 @@ class TestRegionDetectReplacesTheWholePhotoGuess:
 
         assert "function isUnsavedProposal(shot)" in source
         assert 'return !shot.saved && !shot.moved_by_user && shot.origin !== "manual";' in source
-        assert "mergeProposal(proposal, model.region !== null);" in source
+        assert "mergeProposal(proposal, model.region !== null, !automatic);" in source
         assert (
             'mergeProposal(await apiSend("POST", `/api/groups/${groupId}/fill-shortfall`));'
             in source
@@ -2812,6 +2812,10 @@ class TestRegionDetectInARealBrowser:
             page.mouse.down()
             page.mouse.move(sx + 12, sy + 12, steps=4)
             page.mouse.up()
+            # The dragged shot is selected, so the first empty click only deselects it.
+            page.mouse.click(*client(150, 150))
+            assert page.locator("#editor-svg circle.shot.selected").count() == 0
+            assert page.locator("#editor-svg circle.shot.manual").count() == 0
             page.mouse.click(*client(150, 150))
             assert page.locator("#editor-svg circle.shot.manual").count() == 1
 

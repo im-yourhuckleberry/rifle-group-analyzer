@@ -1924,3 +1924,10 @@ SMOKE: PASSED
 - New: `test_an_empty_click_deselects_before_it_adds`, `test_a_dragged_shot_keeps_its_grab_offset` (grab at 0.8 r, centre moves by drag delta ±0.75 px), `test_undo_takes_back_remove_add_and_move` (button + Ctrl/Cmd+Z; undone removal saves no rejection; opening auto-detect is not undoable).
 - The one failure, `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole`, fails identically on the unmodified tree (verified with `git stash`): `all_inner_texts()` of `button.danger` includes the hidden reference-change "Continue" button. Not caused by this change.
 - `make lint` → clean (shellcheck not installed).
+
+## 2026-10-08 — Reference page: zoom/pan, draggable marks, constant-size marks (T4 e2e)
+
+- `pytest tests/e2e/test_reference_marking.py -q` → 4 passed (zoomed mark lands within 1.5 image px of the click; mark radius 5 css px ±5% at fit and >3x; dragged mark keeps a 3 px grab offset; empty drag pans 80/50 css px ±1 and places no mark).
+- `pytest tests/unit tests/integration tests/e2e -q` → 6059 passed, 3 failed, 2 skipped, 1 xfailed (733 s). No CSP violations reported by the e2e console collector (stage transform is set through CSSOM).
+- Two of the failures were from the earlier review-editor commit (489d5e0), missed because only `tests/e2e` was run then: `TestRegionDetectReplacesTheWholePhotoGuess::test_the_page_script_replaces_unsaved_proposals_only_for_a_region_detect` (source-text assertion of the old `mergeProposal` call) and `TestRegionDetectInARealBrowser::test_moved_and_manual_shots_survive_a_region_detect` (expected an empty click after a drag to add; it now deselects first). Both tests updated to the intended behaviour → `6 passed`.
+- Remaining failure: the pre-existing `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole` (hidden "Continue" danger button; fails on the base commit too).

@@ -18,16 +18,20 @@ function clamp(value, low, high) {
 /**
  * Attach zoom to `svg`. `options.bounds` is `{ x, y, w, h }`, the full (1x) view; `options.onView`
  * is called as `onView(zoomLevel, view)` after every change; call `fit()` once to set the first view.
+ * By default the view is applied as the SVG viewBox. A page that zooms some other way passes
+ * `options.apply(view)` and `options.frame`, the untransformed element the view fills on screen.
  * Returns { setView, zoomAt, zoomBy, fit, zoomLevel, getView, pixelsPerUnit, unitsUnder, startPan }.
  * The wheel listener lives on `svg` only, so the page scrolls normally elsewhere.
  */
 export function createZoom(svg, options) {
   const { bounds } = options;
   const aspect = bounds.h / bounds.w;
+  const frame = options.frame || svg;
+  const apply = options.apply || ((v) => svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`));
   let view = { ...bounds };
 
   function pixelsPerUnit() {
-    const rect = svg.getBoundingClientRect();
+    const rect = frame.getBoundingClientRect();
     return rect.width > 0 ? rect.width / view.w : 1;
   }
 
@@ -48,7 +52,7 @@ export function createZoom(svg, options) {
       w,
       h,
     };
-    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+    apply(view);
     if (options.onView) options.onView(bounds.w / view.w, { ...view });
   }
 
@@ -78,7 +82,7 @@ export function createZoom(svg, options) {
     setView,
     zoomAt,
     zoomBy(factor) {
-      const rect = svg.getBoundingClientRect();
+      const rect = frame.getBoundingClientRect();
       zoomAt(factor, rect.left + rect.width / 2, rect.top + rect.height / 2);
     },
     fit() {
