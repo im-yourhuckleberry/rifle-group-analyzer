@@ -1916,3 +1916,11 @@ SMOKE: PASSED
   - load average 5.17 before, 10.05 after.
 - `.venv/bin/pytest tests/unit/test_templates_shell.py -q && test -s README.md && grep -q "make run" README.md` → 105 passed, OK (T5.1)
 - **Not run:** no review-agent verdict exists for Group 4 or end-to-end. The user stopped agent spawns (B-83), so the full suite above is the closing gate.
+
+## 2026-10-08 — Review editor: deselect-first click, grab offset, undo (T4 e2e)
+
+- `pytest tests/e2e/test_review_editing.py tests/e2e/test_ac9_ragged.py tests/e2e/test_ac10_guards.py tests/e2e/test_plot_visuals.py tests/e2e/test_ac1_photo_to_stats.py -q` → 16 passed, 1 failed
+- `pytest tests/e2e -q` → 107 passed, 1 failed (200 s)
+- New: `test_an_empty_click_deselects_before_it_adds`, `test_a_dragged_shot_keeps_its_grab_offset` (grab at 0.8 r, centre moves by drag delta ±0.75 px), `test_undo_takes_back_remove_add_and_move` (button + Ctrl/Cmd+Z; undone removal saves no rejection; opening auto-detect is not undoable).
+- The one failure, `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole`, fails identically on the unmodified tree (verified with `git stash`): `all_inner_texts()` of `button.danger` includes the hidden reference-change "Continue" button. Not caused by this change.
+- `make lint` → clean (shellcheck not installed).

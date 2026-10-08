@@ -12,6 +12,7 @@ const MAX_EXPECTED = 200;
 const NO_PAIR_COST = 1e6;
 const RING_CLICK_REACH = 1.3;
 const AIM_RING_IN = 0.22;
+const UNDO_LIMIT = 50;
 const AIM_KIND_LABELS = {
   paster_center: "paster center",
   dot_center: "dot center",
@@ -20,7 +21,7 @@ const AIM_KIND_LABELS = {
   grid_intersection: "grid crossing",
 };
 const EDIT_HINT =
-  "Scroll to zoom and drag empty space to pan. Click an empty spot to add a shot, drag a shot to move it, select one and use Not a bullet hole to remove it.";
+  "Scroll to zoom and drag empty space to pan. Click an empty spot to add a shot (or to deselect), drag a shot to move it, select one and use Not a bullet hole to remove it. Undo (\u2318Z) takes back the last change.";
 
 const root = document.getElementById("review-root");
 const server = JSON.parse(root.dataset.state);
@@ -52,6 +53,7 @@ const els = {
   fill: document.getElementById("fill-button"),
   aim: document.getElementById("aim-button"),
   remove: document.getElementById("delete-button"),
+  undo: document.getElementById("undo-button"),
   aimStatus: document.getElementById("aim-status"),
   suggestion: document.getElementById("aim-suggestion"),
   suggestionText: document.getElementById("aim-suggestion-text"),
@@ -81,6 +83,25 @@ const model = {
   suggestions: [],
   suggestionIndex: -1,
 };
+// Snapshots of the shots and rejections taken before each change, newest last.
+const history = [];
+
+function remember() {
+  history.push({
+    shots: model.shots.map((s) => ({ ...s })),
+    rejections: model.rejections.map((r) => ({ ...r })),
+  });
+  if (history.length > UNDO_LIMIT) history.shift();
+}
+
+function undo() {
+  if (isFinal || model.busy || history.length === 0) return;
+  const previous = history.pop();
+  model.shots = previous.shots;
+  model.rejections = previous.rejections;
+  model.selected = null;
+  refresh();
+}
 
 function fromServerShot(shot) {
   return {
@@ -187,6 +208,7 @@ function refresh() {
     !suggesting || (model.suggestionIndex >= 0 && model.suggestions.length < 2) || model.busy;
   els.manualAim.disabled = !suggesting || model.busy;
   els.remove.disabled = isFinal || model.selected === null || model.busy;
+  els.undo.disabled = isFinal || history.length === 0 || model.busy;
   els.aimStatus.textContent = model.aim ? "Aim point is set." : "Aim point is not set.";
   const blocker = finalizeBlocker();
   els.finalize.disabled = blocker !== "" || model.busy;
@@ -230,6 +252,7 @@ function setMode(mode) {
 
 function removeSelected() {
   if (isFinal || model.selected === null) return;
+  remember();
   const [shot] = model.shots.splice(model.selected, 1);
   if (!isPlaceholder(shot) && !(shot.origin === "manual" && !shot.saved)) {
     model.rejections.push({ x_in: shot.x_in, y_in: shot.y_in, reason: "not_a_bullet_hole" });
@@ -246,11 +269,12 @@ function isUnsavedProposal(shot) {
   return !shot.saved && !shot.moved_by_user && shot.origin !== "manual";
 }
 
-function mergeProposal(proposal, replaceUnsavedProposals = false) {
+function mergeProposal(proposal, replaceUnsavedProposals = false, undoable = true) {
   // Unmoved estimated shots are placeholders the proposal replaces. A Detect inside a region also
   // replaces the earlier unsaved, unmoved proposals (the whole-photo guess); saved, moved and
   // manual shots always stay.
   const replaceable = (s) => isPlaceholder(s) || (replaceUnsavedProposals && isUnsavedProposal(s));
+  if (undoable) remember();
   const kept = model.shots.filter((s) => !replaceable(s));
   const fresh = unmatchedProposals(kept, proposal.shots.map(fromProposal), proposal.bullet_diameter_in);
   model.shots = [...kept, ...fresh];
@@ -444,7 +468,7 @@ function mustDrawRegion() {
   return !isFinal && server.other_groups_on_photo > 0 && model.region === null;
 }
 
-async function detect() {
+async function detect(automatic = false) {
   if (mustDrawRegion()) {
     showNotices([SHARED_PHOTO_NOTICE], "info");
     sharedNoticeShown = true;
@@ -461,7 +485,7 @@ async function detect() {
     ? { roi_px: { x0: model.region[0], y0: model.region[1], x1: model.region[2], y1: model.region[3] } }
     : {};
   const proposal = await apiSend("POST", `/api/groups/${groupId}/detect`, body);
-  mergeProposal(proposal, model.region !== null);
+  mergeProposal(proposal, model.region !== null, !automatic);
   suggestAims(proposal.aim_candidates || []);
 }
 
@@ -561,8 +585,8 @@ if (hasFrame) {
     radiusIn: server.bullet_diameter_in / 2,
     onAdd(xIn, yIn) {
       if (isFinal) return;
+      remember();
       model.shots.push({ x_in: xIn, y_in: yIn, origin: "manual", moved_by_user: false, confidence: null, saved: false });
-      model.selected = model.shots.length - 1;
       refresh();
     },
     onSelect(index) {
@@ -571,6 +595,9 @@ if (hasFrame) {
     },
     onView(zoom) {
       els.zoomLevel.textContent = `${zoom.toFixed(1)}\u00d7`;
+    },
+    onMoveStart() {
+      if (!isFinal) remember();
     },
     onMove(index, xIn, yIn) {
       if (isFinal) return;
@@ -592,7 +619,7 @@ els.expected.addEventListener("change", () => {
   if (Number.isInteger(value) && value >= 1 && value <= MAX_EXPECTED) model.expected = value;
   refresh();
 });
-els.detect.addEventListener("click", () => guarded(detect));
+els.detect.addEventListener("click", () => guarded(() => detect()));
 els.fill.addEventListener("click", () => guarded(fillShortfall));
 els.save.addEventListener("click", () =>
   guarded(async () => {
@@ -607,6 +634,7 @@ els.nextAim.addEventListener("click", nextSuggestedAim);
 els.manualAim.addEventListener("click", placeAimYourself);
 els.region.addEventListener("click", () => setMode("region"));
 els.remove.addEventListener("click", removeSelected);
+els.undo.addEventListener("click", undo);
 els.zoomIn.addEventListener("click", () => editor && editor.zoomBy(BUTTON_ZOOM_STEP));
 els.zoomOut.addEventListener("click", () => editor && editor.zoomBy(1 / BUTTON_ZOOM_STEP));
 els.zoomFit.addEventListener("click", () => editor && editor.fit());
@@ -615,7 +643,10 @@ els.finalize.addEventListener("click", finalizeGroup);
 document.addEventListener("keydown", (event) => {
   const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
   if (typing || !editor) return;
-  if (event.key === "Delete" || event.key === "Backspace") {
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    undo();
+  } else if (event.key === "Delete" || event.key === "Backspace") {
     event.preventDefault();
     removeSelected();
   } else if (event.key === "+" || event.key === "=") {
@@ -635,5 +666,6 @@ els.hint.textContent = hasFrame && !isFinal
   : "";
 refresh();
 if (hasFrame && !isFinal && model.shots.length === 0 && model.rejections.length === 0) {
-  guarded(detect);
+  // The first detect on opening is the starting point, so Undo does not take it back.
+  guarded(() => detect(true));
 }

@@ -29,8 +29,10 @@ function clamp(value, low, high) {
 /**
  * Create the editor on `svg`.
  * Options: imageUrl, ppi, width, height (working px), radiusIn (bullet radius in inches), and the
- * callbacks onAdd(xIn, yIn), onSelect(index|null), onMove(index, xIn, yIn), onAimClick(xPx, yPx),
- * onRegion(x0, y0, x1, y1, done) and onView(zoomLevel).
+ * callbacks onAdd(xIn, yIn), onSelect(index|null), onMoveStart(index), onMove(index, xIn, yIn),
+ * onAimClick(xPx, yPx), onRegion(x0, y0, x1, y1, done) and onView(zoomLevel).
+ * A click on empty space deselects when a shot is selected and adds a shot otherwise. A dragged
+ * shot keeps the offset from where it was grabbed, so it never jumps under the pointer.
  * `render({ shots, selected, aim, region, aimCandidates, activeCandidate })` draws everything;
  * `aimCandidates` are `{ x_in, y_in, label }` suggestions drawn as numbered rings, the one at
  * `activeCandidate` emphasised. Rings never take pointer input.
@@ -165,7 +167,14 @@ export function createEditor(svg, options) {
       return;
     }
     options.onSelect(index);
-    drag = { kind: "shot", index, start: point, moved: false };
+    const shot = state.shots[index];
+    drag = {
+      kind: "shot",
+      index,
+      start: point,
+      offset: { x: shot.x_in * ppi - point.x, y: shot.y_in * ppi - point.y },
+      moved: false,
+    };
   });
 
   svg.addEventListener("pointermove", (event) => {
@@ -182,8 +191,9 @@ export function createEditor(svg, options) {
     if (drag.kind === "shot") {
       const travelled = Math.hypot(point.x - drag.start.x, point.y - drag.start.y) * pixelsPerUnit();
       if (!drag.moved && travelled < DRAG_THRESHOLD_PX) return;
+      if (!drag.moved && options.onMoveStart) options.onMoveStart(drag.index);
       drag.moved = true;
-      options.onMove(drag.index, point.x / ppi, point.y / ppi);
+      moveShot(drag, point);
     } else if (drag.kind === "region") {
       options.onRegion(
         Math.min(drag.start.x, point.x),
@@ -195,16 +205,22 @@ export function createEditor(svg, options) {
     }
   });
 
+  function moveShot(shotDrag, point) {
+    const x = clamp(point.x + shotDrag.offset.x, 0, width - 1);
+    const y = clamp(point.y + shotDrag.offset.y, 0, height - 1);
+    options.onMove(shotDrag.index, x / ppi, y / ppi);
+  }
+
   function finish(event) {
     if (!drag) return;
     const point = toWorking(event);
     const finished = drag;
     drag = null;
     if (finished.kind === "shot" && finished.moved) {
-      options.onMove(finished.index, point.x / ppi, point.y / ppi);
+      moveShot(finished, point);
     } else if (finished.kind === "empty" && !finished.panning) {
-      options.onSelect(null);
-      options.onAdd(point.x / ppi, point.y / ppi);
+      if (state.selected !== null) options.onSelect(null);
+      else options.onAdd(point.x / ppi, point.y / ppi);
     } else if (finished.kind === "region") {
       const x0 = Math.round(Math.min(finished.start.x, point.x));
       const y0 = Math.round(Math.min(finished.start.y, point.y));
