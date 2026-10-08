@@ -180,6 +180,7 @@ export function createEditor(svg, options) {
       const dy = event.clientY - drag.clientStart.y;
       if (!drag.panning && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       drag.panning = true;
+      svg.classList.add("is-grabbing");
       drag.pan.move(event.clientX, event.clientY);
       return;
     }
@@ -189,6 +190,7 @@ export function createEditor(svg, options) {
       if (!drag.moved && travelled < DRAG_THRESHOLD_PX) return;
       if (!drag.moved && options.onMoveStart) options.onMoveStart(drag.index);
       drag.moved = true;
+      svg.classList.add("is-grabbing");
       moveShot(drag, point);
     } else if (drag.kind === "region") {
       options.onRegion(
@@ -212,6 +214,7 @@ export function createEditor(svg, options) {
     const point = toWorking(event);
     const finished = drag;
     drag = null;
+    svg.classList.remove("is-grabbing");
     if (finished.pan) finished.pan.end();
     if (finished.kind === "aim") {
       if (!finished.panning) options.onAimClick(point.x, point.y);
@@ -232,6 +235,7 @@ export function createEditor(svg, options) {
   svg.addEventListener("pointercancel", () => {
     if (drag && drag.pan) drag.pan.end();
     drag = null;
+    svg.classList.remove("is-grabbing");
   });
 
   zoom.fit();

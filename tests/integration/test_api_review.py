@@ -1821,6 +1821,7 @@ class TestReview21FlowInARealBrowser:
         self._save(page)
         assert page.inner_text("#flash") == "Saved."
         page.click("#finalize-button")
+        page.click("#finalize-confirm-button")
         page.wait_for_url(f"{server}/groups/{group.id}")
 
         row, shots = self._group_row(settings, group.id)
@@ -1871,6 +1872,7 @@ class TestReview21FlowInARealBrowser:
         self._save(page)
         assert page.inner_text("#flash") == "Saved."
         page.click("#finalize-button")
+        page.click("#finalize-confirm-button")
         page.wait_for_url(f"{server}/groups/{group.id}")
 
         row, shots = self._group_row(settings, group.id)
@@ -2540,6 +2542,7 @@ class TestSiblingNudgeInARealBrowser:
             page.locator("#save-button:enabled").wait_for()
             assert page.inner_text("#flash") == "Saved."
             page.click("#finalize-button")
+            page.click("#finalize-confirm-button")
             page.wait_for_url(f"{server}/groups/{group.id}")
             row, shots = _group_after(settings, group.id)
             assert row.status == "final" and len(shots) == expected
@@ -2659,6 +2662,7 @@ class TestSameDirectionDragInARealBrowser:
             page.click("#save-button")
             page.locator("#save-button:enabled").wait_for()
             page.click("#finalize-button")
+            page.click("#finalize-confirm-button")
             page.wait_for_url(f"{server}/groups/{group.id}")
             row, shots = _group_after(settings, group.id)
             assert row.status == "final" and len(shots) == expected

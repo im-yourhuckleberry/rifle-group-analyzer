@@ -1,6 +1,7 @@
 /* Review editor: the photo is an <image> inside the SVG, so zoom and pan only change the viewBox. */
 
 .editor-wrap.review-editor { cursor: crosshair; }
+.review-editor svg.is-grabbing, .review-editor svg.is-grabbing .shot { cursor: grabbing; }
 
 /* While detect or fill runs: a thin bar sweeps along the top of the photo (still under reduced motion). */
 .review-editor[aria-busy="true"]::after {

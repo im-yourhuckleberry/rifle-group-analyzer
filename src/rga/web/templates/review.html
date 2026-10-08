@@ -38,7 +38,7 @@
       </div>
       <div>
         <div id="shot-counter" class="shot-counter" aria-live="polite">0 of 0 shots</div>
-        <div id="spread-line" class="muted"></div>
+        <div id="spread-line" class="spread-line"></div>
         <span id="estimated-badge" class="badge warn" hidden>includes estimated shots</span>
       </div>
 
@@ -71,6 +71,13 @@
         <button type="button" id="save-button" class="secondary">Save</button>
         <button type="button" id="finalize-button" disabled>Finalize</button>
         {% if return_to %}<a class="button secondary" id="back-link" href="{{ return_to }}">Back</a>{% endif %}
+      </div>
+      <div id="finalize-confirm" class="notice" role="alertdialog" aria-labelledby="finalize-confirm-text" hidden>
+        <p id="finalize-confirm-text">Finalizing locks this group: its shots, aim and shot count can no longer be edited.</p>
+        <div class="actions">
+          <button type="button" id="finalize-confirm-button">Finalize group</button>
+          <button type="button" id="finalize-cancel-button" class="secondary">Cancel</button>
+        </div>
       </div>
       <p class="muted" id="finalize-reason"></p>
     </aside>

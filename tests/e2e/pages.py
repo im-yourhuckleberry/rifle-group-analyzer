@@ -1004,7 +1004,7 @@ class App:
         return [(float(x), float(y)) for x, y in mapped]
 
     def review_finalize(self, expect_url: str | None = r"/(?:groups|rifles)/\d+(?:\?.*)?$") -> None:
-        """Press Finalize (it saves first) and wait for the page it moves to.
+        """Press Finalize, confirm it (it saves first) and wait for the page it moves to.
 
         A group made on the rifle page returns there after finalizing; this then opens the group's
         own page so a journey can read its statistics. Pass `expect_url=None` to stay on the page
@@ -1012,6 +1012,7 @@ class App:
         """
         match = re.search(r"/groups/(\d+)/review", self.path())
         self.page.locator("#finalize-button").click()
+        self.page.locator("#finalize-confirm-button").click()
         if expect_url is None:
             return
         self.wait_path(expect_url)

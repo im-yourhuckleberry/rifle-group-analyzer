@@ -62,6 +62,9 @@ const els = {
   manualAim: document.getElementById("aim-manual-button"),
   save: document.getElementById("save-button"),
   finalize: document.getElementById("finalize-button"),
+  finalizeBox: document.getElementById("finalize-confirm"),
+  finalizeConfirm: document.getElementById("finalize-confirm-button"),
+  finalizeCancel: document.getElementById("finalize-cancel-button"),
   reason: document.getElementById("finalize-reason"),
   zoomIn: document.getElementById("zoom-in-button"),
   zoomOut: document.getElementById("zoom-out-button"),
@@ -70,12 +73,13 @@ const els = {
   zoomLevel: document.getElementById("zoom-level"),
   wrap: document.getElementById("editor-wrap"),
 };
-// What a busy button says while its request runs, so a slow detect never looks like a dead page.
+// What a busy button says while its request runs, so a slow detect never looks like a dead page:
+// activity -> [button, idle label, working label].
 const BUSY_LABELS = {
-  detect: ["Detect holes", "Detecting holes\u2026"],
-  fill: ["Fill shortfall", "Filling\u2026"],
-  save: ["Save", "Saving\u2026"],
-  finalize: ["Finalize", "Finalizing\u2026"],
+  detect: [els.detect, "Detect holes", "Detecting holes\u2026"],
+  fill: [els.fill, "Fill shortfall", "Filling\u2026"],
+  save: [els.save, "Save", "Saving\u2026"],
+  finalize: [els.finalizeConfirm, "Finalize group", "Finalizing\u2026"],
 };
 
 let storedExpected = server.shots_expected;
@@ -221,11 +225,14 @@ function refresh() {
   els.aimStatus.textContent = model.aim ? "Aim point is set." : "Aim point is not set.";
   const blocker = finalizeBlocker();
   els.finalize.disabled = blocker !== "" || model.busy;
+  if (blocker !== "") els.finalizeBox.hidden = true;
+  els.finalizeConfirm.disabled = model.busy;
+  els.finalizeCancel.disabled = model.busy;
   els.reason.textContent = blocker;
   els.aim.textContent = model.mode === "aim" ? "Click the aim mark" : "Mark aim";
   els.region.textContent = model.mode === "region" ? "Drag a region" : model.region ? "Change region" : "Set region";
-  for (const [key, [idle, working]] of Object.entries(BUSY_LABELS)) {
-    els[key].textContent = model.activity === key ? working : idle;
+  for (const [key, [button, idle, working]] of Object.entries(BUSY_LABELS)) {
+    button.textContent = model.activity === key ? working : idle;
   }
   els.wrap.setAttribute("aria-busy", String(model.activity === "detect" || model.activity === "fill"));
   for (const button of [els.detect, els.fill, els.save, els.aim, els.region]) {
@@ -520,6 +527,17 @@ async function clickAim(xPx, yPx) {
   });
 }
 
+function askFinalize() {
+  if (els.finalize.disabled) return;
+  els.finalizeBox.hidden = false;
+  els.finalizeConfirm.focus();
+}
+
+function cancelFinalize() {
+  els.finalizeBox.hidden = true;
+  els.finalize.focus();
+}
+
 async function finalizeGroup() {
   await guarded(async () => {
     await save();
@@ -657,7 +675,12 @@ els.zoomRegion.addEventListener(
   "click",
   () => editor && model.region && editor.zoomToRegion(model.region, { animate: true }),
 );
-els.finalize.addEventListener("click", finalizeGroup);
+els.finalize.addEventListener("click", askFinalize);
+els.finalizeConfirm.addEventListener("click", finalizeGroup);
+els.finalizeCancel.addEventListener("click", cancelFinalize);
+els.finalizeBox.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !model.busy) cancelFinalize();
+});
 document.addEventListener("keydown", (event) => {
   const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
   if (typing || !editor) return;

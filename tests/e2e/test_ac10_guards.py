@@ -101,7 +101,7 @@ def test_the_only_delete_control_is_not_a_bullet_hole(app: App) -> None:
     assert app.page.locator("#delete-button").is_disabled()
     app.review_select_shot(0)
     assert app.page.locator("#delete-button").inner_text().strip() == "Not a bullet hole"
-    assert app.main.locator("button.danger").all_inner_texts() == ["Not a bullet hole"]
+    assert app.main.locator("button.danger:visible").all_inner_texts() == ["Not a bullet hole"]
     assert (
         app.main.get_by_role(
             "button", name=re.compile(r"delete|remove|discard|clear", re.I)

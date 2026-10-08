@@ -1938,3 +1938,11 @@ SMOKE: PASSED
 - E2E fixture and the zooming integration browser pages (`test_api_review.py`, `test_group_plot.py`) now run with `reduced_motion="reduce"` so their exact-geometry assertions read a settled view; first run without it failed `TestZoomPanInARealBrowser::test_the_region_is_framed_on_load_and_zoom_controls_work` (view read mid-animation), as expected.
 - `pytest tests/unit tests/integration tests/e2e -q` → 6068 passed, 1 failed (pre-existing `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole`), 2 skipped, 1 xfailed (760 s).
 - `ruff check tests src` → clean.
+
+## 2026-10-08 — Finalize confirmation, press states, text size, dark/contrast, type, plot material (T4 e2e)
+
+- `pytest tests/e2e/test_polish.py -q` → 7 passed: Finalize shows a confirm (Cancel and Escape keep `draft`; "Finalize group" → `final`); button computed transform `matrix(0.97…)` while pressed with motion on, `none` under reduced motion; `#editor-svg.is-grabbing` + `cursor: grabbing` only during a shot drag; no `html { font-size }` rule in any stylesheet; dark scheme → body `rgb(20, 24, 22)` / ink `rgb(231, 235, 232)`; `prefers-contrast: more` → `--line #5f6862`; `.plot-zoom` has `blur(16px)` backdrop and rgba background, solid `rgb(255, 255, 255)` with no backdrop under `prefers-reduced-transparency: reduce` (CDP emulation).
+- Finalize clicks in `tests/e2e/pages.py` and 4 integration browser tests now confirm the dialog.
+- Fixed the pre-existing `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole`: it counts `button.danger:visible` (the hidden reference-change "Continue" was counted) → `pytest tests/e2e/test_ac10_guards.py -q` 4 passed.
+- `pytest tests/unit tests/integration tests/e2e -q` → 6075 passed, 1 failed (ac10, collected before its fix; passes after), 2 skipped, 1 xfailed (794 s). `ruff check tests src` → clean.
+- Visual check in Chromium against the running app (groups list, group page) in light and dark appearance.
