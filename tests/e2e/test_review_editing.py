@@ -47,6 +47,7 @@ def selected_count(app: App) -> int:
 def test_an_empty_click_deselects_before_it_adds(app: App) -> None:
     open_editor(app)
     shots, _ = app.review_counts()
+    app.review_set_expected(shots + 2)
     spot = empty_point(app)
 
     app.review_select_shot(0)
@@ -62,6 +63,22 @@ def test_an_empty_click_deselects_before_it_adds(app: App) -> None:
     assert app.review_counts()[0] == shots + 2
 
 
+def test_no_shot_is_added_past_the_number_fired(app: App) -> None:
+    open_editor(app)
+    shots, expected = app.review_counts()
+    assert shots == expected
+
+    app.review_click(*empty_point(app))
+
+    assert app.review_counts() == (shots, expected)
+    flash = app.page.locator("#flash")
+    assert flash.is_visible()
+    assert f"Already {shots} of {expected} shots" in flash.inner_text()
+    app.review_set_expected(expected + 1)
+    app.review_click(*empty_point(app))
+    assert app.review_counts() == (shots + 1, expected + 1)
+
+
 def test_a_dragged_shot_keeps_its_grab_offset(app: App) -> None:
     open_editor(app)
     shot = app.review_shots()[0]
@@ -75,8 +92,12 @@ def test_a_dragged_shot_keeps_its_grab_offset(app: App) -> None:
     app.page.mouse.up()
 
     moved = app.review_shots()[0]
-    assert moved["cx"] == pytest.approx(shot["cx"] + DRAG_SCREEN[0] / scale, abs=POSITION_TOLERANCE_PX)
-    assert moved["cy"] == pytest.approx(shot["cy"] + DRAG_SCREEN[1] / scale, abs=POSITION_TOLERANCE_PX)
+    assert moved["cx"] == pytest.approx(
+        shot["cx"] + DRAG_SCREEN[0] / scale, abs=POSITION_TOLERANCE_PX
+    )
+    assert moved["cy"] == pytest.approx(
+        shot["cy"] + DRAG_SCREEN[1] / scale, abs=POSITION_TOLERANCE_PX
+    )
 
 
 def test_undo_takes_back_remove_add_and_move(app: App) -> None:
@@ -92,6 +113,7 @@ def test_undo_takes_back_remove_add_and_move(app: App) -> None:
     assert app.review_shots() == [dict(s, selected=False) for s in original]
     assert undo.is_disabled()
 
+    app.review_set_expected(len(original) + 1)
     app.review_click(*empty_point(app))
     assert app.review_counts()[0] == len(original) + 1
     app.page.keyboard.press("ControlOrMeta+z")

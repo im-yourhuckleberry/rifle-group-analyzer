@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "suppressor_picker.html" import suppressor_picker %}
+{% from "group_form_fields.html" import group_form_fields %}
 {% block title %}{{ detail.rifle.name }}{% endblock %}
 {% macro num(v) %}{% if v is not none %}{{ v }}{% endif %}{% endmacro %}
 {% macro text(v) %}{% if v %}{{ v }}{% endif %}{% endmacro %}
@@ -272,7 +272,6 @@
             {% endif %}
             <td>
               <span class="badge{% if g.status == 'draft' %} warn{% endif %}">{{ g.status }}</span>
-              {% if row.size and row.size[3] %}<span class="badge warn">includes estimated shots</span>{% endif %}
             </td>
             <td class="group-notes">{{ g.notes }}</td>
             <td>
@@ -313,91 +312,7 @@
 
   <section class="card stack" id="new-group-card" aria-label="Add a group" data-state="{{ state_json }}">
     <h2>Add a group</h2>
-    {% if not detail.loads %}
-    <p class="notice danger">This rifle has no loads yet. Add a load above first.</p>
-    {% else %}
-    <div class="field">
-      <label for="g-photo">Target photo (optional)</label>
-      <input id="g-photo" type="file" accept="image/*">
-      <span class="hint" id="g-photo-note">Choosing a photo fills in the date and time it was taken.</span>
-    </div>
-    <div class="grid-2">
-      <div class="field">
-        <label for="g-date">Date</label>
-        <input id="g-date" type="date" value="{{ today }}">
-        <span class="hint" id="g-date-source">entered</span>
-      </div>
-      <div class="field">
-        <label for="g-time">Time (optional)</label>
-        <input id="g-time" type="time" step="60">
-      </div>
-      <div class="field">
-        <label for="g-distance">Distance (yd)</label>
-        <input id="g-distance" type="number" min="1" max="10000" step="1" value="{{ defaults.distance_yd if defaults.distance_yd is not none else 100 }}">
-      </div>
-      <div class="field">
-        <label for="g-position">Position</label>
-        <select id="g-position">
-          {% for value, label in position_labels.items() %}
-          <option value="{{ value }}"{% if value == (defaults.position or "bench") %} selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        {{ suppressor_picker("g", detail.suppressors, defaults.suppressor, defaults.suppressor_id) }}
-      </div>
-    </div>
-
-    <details id="weather-panel" class="card">
-      <summary>
-        Weather
-        <span class="badge warn" id="weather-required" hidden>needed at 200 yd and beyond</span>
-        <span class="muted" id="weather-optional">(optional)</span>
-        <span class="badge" id="weather-skipped-badge" hidden>weather skipped</span>
-      </summary>
-      <div class="stack">
-        <p class="notice info" id="weather-notice" hidden>Enter the temperature, or skip weather, before adding the group.</p>
-        <div class="grid-2">
-          <div class="field"><label for="w-temp">Temperature (&deg;F)</label><input id="w-temp" type="number" step="0.1"></div>
-          <div class="field"><label for="w-da">Density altitude (ft, optional)</label><input id="w-da" type="number" step="1"></div>
-          <div class="field"><label for="w-wind">Wind (mph, optional)</label><input id="w-wind" type="number" min="0" step="0.1"></div>
-          <div class="field"><label for="w-clock">Wind direction (o'clock, optional)</label><input id="w-clock" type="number" min="1" max="12" step="1"></div>
-        </div>
-        <div class="actions"><button type="button" id="skip-weather" class="secondary">Skip weather</button></div>
-      </div>
-    </details>
-
-    <div class="grid-2">
-      <div class="field">
-        <label for="g-load">Load</label>
-        <select id="g-load">
-          {% for entry in detail.loads %}
-          <option value="{{ entry.load.id }}"{% if entry.load.id == defaults.load_id %} selected{% endif %}>{{ entry.load.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label for="g-lot">Lot or batch code</label>
-        <input id="g-lot" type="text" maxlength="64" list="g-lot-options" autocomplete="off" value="{{ defaults.lot_code or '' }}">
-        <datalist id="g-lot-options"></datalist>
-        <span class="hint">A new code starts a new lot of this load.</span>
-      </div>
-      <div class="field">
-        <label for="g-shots">Shots fired</label>
-        <input id="g-shots" type="number" min="1" max="200" step="1" value="{{ defaults.shots_expected or 5 }}">
-      </div>
-      <div class="field">
-        <label for="g-elevation">Elevation dialed (mil, optional)</label>
-        <input id="g-elevation" type="number" step="0.1">
-      </div>
-    </div>
-    <div class="field">
-      <label for="g-notes">Group notes</label>
-      <textarea id="g-notes" rows="2"></textarea>
-    </div>
-    <p class="notice info" id="group-blocked" hidden>Enter the weather, or skip it, before adding the group.</p>
-    <div class="actions"><button type="button" id="add-group">Add group</button></div>
-    {% endif %}
+    {{ group_form_fields(detail, defaults, position_labels, today, pending_photo) }}
   </section>
 </div>
 {% endblock %}

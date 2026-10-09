@@ -1,6 +1,7 @@
 /**
- * Reference page: propose, pick or mark the printed reference, confirm it, then go to review.
- * The app never confirms for the user: only the two "Use ..." buttons call the confirm endpoint.
+ * Reference page: choose one way, find it automatically (pick a numbered outline) or mark it by
+ * hand, then Next confirms that choice and goes on to the aim step. The app never confirms for the
+ * user: only Next calls the confirm endpoint.
  * All writes and reads go through api.js; every dynamic string is set with textContent.
  * The photo and overlay zoom together (scroll, the toolbar or +/-/0) as one CSS-transformed stage;
  * pointer positions map to image pixels through getScreenCTM, so marks are exact at any zoom.
@@ -23,15 +24,36 @@ const app = document.getElementById("reference-app");
 const photoId = Number(app.dataset.photoId);
 const imageWidth = Number(app.dataset.width);
 const imageHeight = Number(app.dataset.height);
+// The page layout sizes the photo to the window from its shape (app.css, `--photo-aspect`).
+function setPhotoAspect(width, height) {
+  if (width > 0 && height > 0) app.closest(".flow-page")?.style.setProperty("--photo-aspect", String(width / height));
+}
+setPhotoAspect(imageWidth, imageHeight);
 const reviewUrl = app.dataset.reviewUrl;
 const returnTo = app.dataset.returnTo || "/";
+// Another group's saved work fixes this photo's scale: there is nothing to choose, Next goes on.
+const locked = app.dataset.locked === "1";
+// This group already has an aim or shots against the old scale: they are cleared before the new one.
+const ownWork = app.dataset.ownWork === "1";
 
 const el = (id) => document.getElementById(id);
 const overlay = el("overlay");
 const viewer = el("viewer");
 const stage = el("stage");
 const kindSelect = el("kind");
-const state = { candidates: [], selected: null, manual: false, marks: [], busy: false };
+// `mode` is the chosen way to set the reference: "auto" (pick a found outline), "manual" (mark the
+// edge by hand) or null before either is chosen; one Next button confirms whichever is chosen.
+const state = {
+  candidates: [],
+  selected: null,
+  hovered: null,
+  mode: null,
+  manual: false,
+  searched: false,
+  marks: [],
+  busy: false,
+};
+const TILT_RATIO = 0.98;
 
 function flash(message) {
   const box = el("flash");
@@ -87,6 +109,29 @@ function markRadius() {
   return MARK_SCREEN_PX * screenToImage();
 }
 
+function candidateNumberAt(candidate) {
+  // Where the option's number is written on the photo: just above the outline's top.
+  if (candidate.circle) {
+    const c = candidate.circle;
+    return [c.center_x_px, c.center_y_px - Math.max(c.axis_major_px, c.axis_minor_px) / 2];
+  }
+  const ys = candidate.grid_points_px.map(([, y]) => y);
+  const top = candidate.grid_points_px[ys.indexOf(Math.min(...ys))];
+  return top;
+}
+
+function drawCandidateNumber(candidate, emphasised) {
+  const [x, y] = candidateNumberAt(candidate);
+  const scale = screenToImage();
+  const label = svg("text", {
+    transform: `translate(${x} ${y - 6 * scale}) scale(${scale * (emphasised ? 1.6 : 1.3)})`,
+    class: emphasised ? "shot-label candidate-number is-active" : "shot-label candidate-number",
+    "text-anchor": "middle",
+  });
+  label.textContent = String(candidate.index + 1);
+  overlay.appendChild(label);
+}
+
 function drawCandidate(candidate, selected) {
   const cls = selected ? "shot detected" : "shot estimated";
   if (candidate.circle) {
@@ -123,29 +168,77 @@ function drawMarks() {
 
 function redraw() {
   overlay.replaceChildren();
-  state.candidates.forEach((candidate, index) => {
-    if (index !== state.selected) drawCandidate(candidate, false);
-  });
-  if (state.selected !== null) drawCandidate(state.candidates[state.selected], true);
+  if (state.mode === "auto") {
+    const focus = state.hovered !== null ? state.hovered : state.selected;
+    state.candidates.forEach((candidate, index) => {
+      if (index !== focus) drawCandidate(candidate, false);
+    });
+    if (state.candidates[focus]) drawCandidate(state.candidates[focus], true);
+    if (state.candidates.length > 1) {
+      state.candidates.forEach((candidate, index) => drawCandidateNumber(candidate, index === focus));
+    }
+  }
   drawMarks();
 }
 
-function candidateLabel(candidate) {
-  const parts = [`Proposal ${candidate.index + 1}`];
-  if (candidate.axis_ratio !== null) parts.push(`axis ratio ${candidate.axis_ratio.toFixed(2)}`);
-  return parts.join(", ");
+function circleSize(candidate) {
+  return (candidate.circle.axis_major_px + candidate.circle.axis_minor_px) / 2;
 }
 
-function renderWarnings(target, warnings) {
-  target.replaceChildren();
-  for (const warning of warnings) target.appendChild(notice("danger", warning));
+function candidateLabel(candidate) {
+  // Plain words: which outline it is, by size among the circles found.
+  const number = `Option ${candidate.index + 1}`;
+  if (!candidate.circle) return `${number}: the grid of squares`;
+  const circles = state.candidates.filter((c) => c.circle).sort((a, b) => circleSize(b) - circleSize(a));
+  if (circles.length < 2) return `${number}: the circle outlined on the photo`;
+  const rank = circles.indexOf(candidate);
+  const size =
+    rank === 0 ? "the biggest circle" : rank === circles.length - 1 ? "the smallest circle" : "a middle-sized circle";
+  return `${number}: ${size}`;
+}
+
+function candidateHint(candidate) {
+  if (candidate.axis_ratio !== null && candidate.axis_ratio < TILT_RATIO) {
+    return "The photo looks taken at an angle, so sizes from it may be slightly off.";
+  }
+  return "";
 }
 
 function renderCandidates() {
   const list = el("candidates");
   list.replaceChildren();
-  el("candidates-panel").hidden = false;
+  // The rows go, so does any hover on them (their pointerleave never fires).
+  state.hovered = null;
+  el("candidates-panel").hidden = state.mode !== "auto";
+  el("candidates-title").textContent = isGrid()
+    ? "Which outline is your printed grid?"
+    : "Which outline is your printed circle?";
   el("candidates-empty").hidden = state.candidates.length > 0;
+  el("candidates-help").textContent =
+    "Each option is outlined and numbered on the photo. Point at an option to highlight it, then pick the one that sits exactly on the printed edge.";
+  if (state.candidates.length === 1) {
+    // One outline found: it is the choice (Next still confirms it), so no radio and no number.
+    const only = state.candidates[0];
+    state.selected = only.index;
+    el("candidates-title").textContent = isGrid() ? "Is this your printed grid?" : "Is this your printed circle?";
+    el("candidates-help").textContent =
+      "Check that the outline sits exactly on the printed edge, then press Next. If it does not, mark it by hand.";
+    const row = document.createElement("div");
+    row.className = "card";
+    row.id = "single-candidate";
+    const text = document.createElement("p");
+    text.textContent = only.circle ? "Circle outlined on the photo." : "Grid outlined on the photo.";
+    row.appendChild(text);
+    const hint = candidateHint(only);
+    if (hint) row.appendChild(notice("danger", hint));
+    list.appendChild(row);
+    updateNext();
+    return;
+  }
+  // Several outlines: the biggest circle starts selected (a pick the user keeps across re-renders).
+  if (state.candidates.length > 0 && !state.candidates.some((c) => c.index === state.selected)) {
+    state.selected = defaultCandidate().index;
+  }
   for (const candidate of state.candidates) {
     const row = document.createElement("div");
     row.className = "card";
@@ -154,21 +247,50 @@ function renderCandidates() {
     radio.type = "radio";
     radio.name = "candidate";
     radio.value = String(candidate.index);
+    radio.checked = candidate.index === state.selected;
     radio.addEventListener("change", () => selectCandidate(candidate.index));
     const text = document.createElement("span");
     text.textContent = candidateLabel(candidate);
     label.append(radio, text);
     row.appendChild(label);
-    for (const warning of candidate.warnings) row.appendChild(notice("danger", warning));
+    const hint = candidateHint(candidate);
+    if (hint) row.appendChild(notice("danger", hint));
+    row.addEventListener("pointerenter", () => {
+      state.hovered = candidate.index;
+      redraw();
+    });
+    row.addEventListener("pointerleave", () => {
+      state.hovered = null;
+      redraw();
+    });
     list.appendChild(row);
   }
-  el("confirm-candidate").disabled = true;
+  updateNext();
+}
+
+function defaultCandidate() {
+  const circles = state.candidates.filter((c) => c.circle);
+  if (circles.length === 0) return state.candidates[0];
+  return circles.reduce((big, c) => (circleSize(c) > circleSize(big) ? c : big));
 }
 
 function selectCandidate(index) {
   state.selected = index;
-  el("confirm-candidate").disabled = false;
+  updateNext();
   redraw();
+}
+
+function ready() {
+  if (locked) return true;
+  if (state.mode === "auto") return state.selected !== null;
+  if (state.mode === "manual") {
+    return isGrid() ? state.marks.length === GRID_MARKS : state.marks.length >= CIRCLE_MIN_MARKS;
+  }
+  return false;
+}
+
+function updateNext() {
+  el("reference-next").disabled = state.busy || !ready();
 }
 
 function updateManualUi() {
@@ -180,43 +302,54 @@ function updateManualUi() {
     const next = count < GRID_MARKS ? GRID_CORNER_NAMES[count] : null;
     el("manual-instructions").textContent = next
       ? `Click the ${next} grid-line crossing of a block of squares (corners in order: top-left, top-right, bottom-right, bottom-left), then enter how many squares it spans.`
-      : "All four corners are placed. Enter the squares across and down, then confirm.";
-    el("confirm-manual").disabled = count !== GRID_MARKS;
+      : "All four corners are placed. Enter the squares across and down, then press Next.";
   } else {
     el("manual-instructions").textContent =
       `Click at least ${CIRCLE_MIN_MARKS} points on the edge of the printed circle, spread around it; more points give a better fit.`;
-    el("confirm-manual").disabled = count < CIRCLE_MIN_MARKS;
   }
+  updateNext();
 }
 
-function setManual(on) {
-  state.manual = on;
-  el("manual-panel").hidden = !on;
-  el("manual-toggle").setAttribute("aria-pressed", String(on));
-  viewer.classList.toggle("is-marking", on);
-  el("viewer-hint").textContent = on
+function setMode(mode) {
+  // A two-way toggle: choosing one way opens its section and closes the other.
+  state.mode = mode;
+  state.manual = mode === "manual";
+  el("find").setAttribute("aria-pressed", String(mode === "auto"));
+  el("manual-toggle").setAttribute("aria-pressed", String(mode === "manual"));
+  el("candidates-panel").hidden = mode !== "auto" || !state.searched;
+  el("manual-panel").hidden = mode !== "manual";
+  viewer.classList.toggle("is-marking", state.manual);
+  el("viewer-hint").textContent = state.manual
     ? "Click the photo to place marks; drag a mark to adjust it. Scroll to zoom in for precision and drag empty space to pan."
-    : "Candidates are drawn on the photo. Choose one in the list, or switch to manual marking. Scroll to zoom and drag to pan.";
+    : "The outlines found are numbered on the photo. Choose one in the list. Scroll to zoom and drag to pan.";
   updateManualUi();
+  redraw();
+}
+
+function chooseAuto() {
+  setMode("auto");
+  if (!state.searched) guarded(findReference);
 }
 
 function resetChoices() {
   state.candidates = [];
   state.selected = null;
+  state.searched = false;
   state.marks = [];
   el("candidates-panel").hidden = true;
   el("candidates").replaceChildren();
   el("warnings").replaceChildren();
-  el("result").hidden = true;
   redraw();
   updateManualUi();
+  // A different kind means a different search; it runs again while that way is chosen.
+  if (state.mode === "auto") guarded(findReference);
 }
 
 async function guarded(action) {
   if (state.busy) return;
   state.busy = true;
   clearFlash();
-  for (const id of ["find", "confirm-candidate", "confirm-manual"]) el(id).disabled = true;
+  for (const id of ["find", "manual-toggle", "reference-next"]) el(id).disabled = true;
   try {
     await action();
   } catch (error) {
@@ -224,7 +357,7 @@ async function guarded(action) {
   } finally {
     state.busy = false;
     el("find").disabled = false;
-    el("confirm-candidate").disabled = state.selected === null;
+    el("manual-toggle").disabled = false;
     updateManualUi();
   }
 }
@@ -235,23 +368,29 @@ async function findReference() {
   });
   state.candidates = result.candidates;
   state.selected = null;
+  state.searched = true;
   renderCandidates();
   redraw();
-  if (state.candidates.length === 0) setManual(true);
+  if (state.candidates.length === 0) {
+    setMode("manual");
+    el("warnings").replaceChildren(notice("info", "Nothing was found automatically. Mark the edge by hand."));
+  }
 }
 
-function finish(result) {
-  el("candidates-panel").hidden = true;
-  el("manual-panel").hidden = true;
-  const warnings = result.warnings || [];
-  const link = el("continue");
-  link.href = reviewUrl || returnTo;
-  link.textContent = reviewUrl ? "Continue to review" : "Continue";
-  renderWarnings(el("result-warnings"), warnings);
-  el("result").hidden = false;
-  if (warnings.length === 0 && reviewUrl) {
-    window.location.assign(reviewUrl);
+function finish() {
+  // Confirmed: straight on to the next step (a tilted photo was already flagged on its option).
+  window.location.assign(reviewUrl || returnTo);
+}
+
+async function next() {
+  if (!ready()) return;
+  if (locked) {
+    finish();
+    return;
   }
+  if (ownWork) await apiSend("POST", `/api/photos/${photoId}/reference/reset`);
+  if (state.mode === "auto") await confirmCandidate();
+  else await confirmManual();
 }
 
 async function confirmCandidate() {
@@ -262,6 +401,7 @@ async function confirmCandidate() {
   });
   finish(result);
 }
+
 
 function manualBody() {
   const points = state.marks.map(([x, y]) => ({ x_px: x, y_px: y }));
@@ -378,10 +518,9 @@ document.addEventListener("keydown", (event) => {
   else if (event.key === "0") zoom.fit({ animate: true });
 });
 
-el("find").addEventListener("click", () => guarded(findReference));
-el("confirm-candidate").addEventListener("click", () => guarded(confirmCandidate));
-el("confirm-manual").addEventListener("click", () => guarded(confirmManual));
-el("manual-toggle").addEventListener("click", () => setManual(!state.manual));
+el("find").addEventListener("click", chooseAuto);
+el("reference-next").addEventListener("click", () => guarded(next));
+el("manual-toggle").addEventListener("click", () => setMode("manual"));
 el("undo-mark").addEventListener("click", () => {
   state.marks.pop();
   redraw();

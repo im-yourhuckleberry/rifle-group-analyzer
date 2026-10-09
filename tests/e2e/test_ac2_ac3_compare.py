@@ -73,8 +73,8 @@ def photo_group(
     app.confirm_reference(kind, candidate="truth", truth=target.truth)
     app.wait_path(r"/groups/\d+/review.*")
     app.review_wait_ready()
-    assert app.review_counts() == (expected, expected), app.review_counter()
     app.review_mark_aim(truth_aim_px=target.truth["groups"][0]["aim_px"], photo_id=ref.photo_id)
+    assert app.review_counts() == (expected, expected), app.review_counter()
     app.review_finalize()
     return ref.group_id, target
 

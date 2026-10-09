@@ -527,13 +527,13 @@ class TestCircleReference:
         data, _ = synth_bytes("circle_tilt_warn")
         photo_id = upload(client, data).json()["id"]
         proposal = propose(client, photo_id, "circle_1in")
-        assert any("Camera tilt" in w for w in proposal.candidates[0].warnings)
+        assert any("looks tilted" in w for w in proposal.candidates[0].warnings)
         response = client.post(
             f"/api/photos/{photo_id}/reference/confirm",
             json={"kind": "circle_1in", "candidate_index": 0},
         )
         assert response.status_code == 200
-        assert any("Camera tilt" in w for w in response.json()["warnings"])
+        assert any("looks tilted" in w for w in response.json()["warnings"])
         assert response.json()["photo"]["axis_ratio"] < 0.98
 
     def test_no_reference_scene_proposes_nothing_and_manual_marks_confirm(
@@ -1184,7 +1184,14 @@ class TestReferencePage:
         assert response.headers["content-type"].startswith("text/html")
         assert f'data-photo-id="{photo["id"]}"' in html
         assert f'data-width="{photo["width_px"]}"' in html
-        for kind in ("grid_1in", "circle_1in", "circle_1_5in", "circle_3in"):
+        for kind in (
+            "grid_1in",
+            "circle_1in",
+            "circle_1_5in",
+            "circle_2in",
+            "circle_2_5in",
+            "circle_3in",
+        ):
             assert f'<option value="{kind}">' in html
         assert f"/api/photos/{photo['id']}/image?variant=oriented" in html
         assert '<script type="module" src="/static/js/reference.js"></script>' in html
@@ -1226,32 +1233,33 @@ class TestReferencePage:
             client.get(f"/photos/{photo['id']}/reference?group_id=999"), 404, "group_not_found"
         )
 
-    def test_confirmed_photo_shows_the_replace_notice(self, client, conn):
+    def test_a_confirmed_photo_is_never_offered_its_old_scale(self, client, conn):
         seeded = seed_photo(conn, confirmed=True)
         html = client.get(f"/photos/{seeded.id}/reference").text
-        assert "already confirmed" in html and "Confirming again replaces it" in html
-        assert "Change scale reference" not in html
-        assert 'data-confirmed="1"' in html
+        assert "already confirmed" not in html and "keep-reference" not in html
+        assert '<div id="reference-controls" class="stack">' in html
+        assert 'data-confirmed="1"' in html and 'data-locked="0"' in html
 
-    def test_a_region_alone_still_shows_the_replace_notice(self, client, conn):
+    def test_a_region_alone_does_not_lock_the_scale(self, client, conn):
         seeded = seed_photo(conn, confirmed=True)
         seed_draft_group(conn, seeded.id, roi_json=ROI_JSON)
         html = client.get(f"/photos/{seeded.id}/reference").text
-        assert "Confirming again replaces it" in html
-        assert "Change scale reference" not in html
+        assert 'data-locked="0"' in html and 'id="locked-scale"' not in html
 
     @pytest.mark.parametrize("kind", ["shots", "aim"])
-    def test_a_group_with_shots_or_an_aim_shows_the_locked_notice(self, client, conn, kind):
+    def test_a_group_with_shots_or_an_aim_fixes_the_scale_and_next_goes_on(
+        self, client, conn, kind
+    ):
         seeded = seed_photo(conn, confirmed=True)
         if kind == "shots":
             seed_group_with_shots(conn, seeded.id)
         else:
             seed_draft_group(conn, seeded.id, aim=PlanePoint(4.0, 5.0))
         html = client.get(f"/photos/{seeded.id}/reference").text
-        assert "has saved shots or an aim" in html
-        assert "<strong>Change scale reference</strong> in the review editor" in html
-        assert "A finalized group locks the scale" in html
-        assert "Confirming again replaces it" not in html
+        assert 'data-locked="1"' in html and 'id="locked-scale"' in html
+        assert '<div id="reference-controls" class="stack" hidden>' in html
+        assert '<button type="button" id="reference-next">Next</button>' in html
+        assert "keep-reference" not in html
 
     def test_page_script_only_uses_api_helpers(self):
         script = (PROJECT_ROOT / "src/rga/web/static/js/reference.js").read_text(encoding="utf-8")

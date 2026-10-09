@@ -45,14 +45,15 @@ def test_finalize_asks_before_it_locks_the_group(app: App) -> None:
     box = app.page.locator("#finalize-confirm")
     assert box.is_hidden()
 
-    app.page.locator("#finalize-button").click()
-    assert box.is_visible()
+    app.page.locator("#finalize-button").click()  # Done saves first, then asks
+    box.wait_for()
     assert "can no longer be edited" in box.inner_text()
     app.page.locator("#finalize-cancel-button").click()
     assert box.is_hidden()
     assert status(app, group_id) == "draft"
 
     app.page.locator("#finalize-button").click()
+    box.wait_for()
     app.page.keyboard.press("Escape")
     assert box.is_hidden()
     assert status(app, group_id) == "draft"
@@ -109,7 +110,9 @@ def test_the_root_font_size_follows_the_browser_setting(app: App) -> None:
 def test_dark_appearance_and_more_contrast_change_the_palette(app: App) -> None:
     app.goto("/")
     light_bg = computed(app, "body", "background-color")
-    light_line = app.page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--line').trim()")
+    light_line = app.page.evaluate(
+        "() => getComputedStyle(document.documentElement).getPropertyValue('--line').trim()"
+    )
 
     app.page.emulate_media(color_scheme="dark")
     assert computed(app, "body", "background-color") == "rgb(20, 24, 22)"
@@ -117,12 +120,16 @@ def test_dark_appearance_and_more_contrast_change_the_palette(app: App) -> None:
     assert computed(app, "body", "background-color") != light_bg
 
     app.page.emulate_media(color_scheme="light", contrast="more")
-    more_line = app.page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--line').trim()")
+    more_line = app.page.evaluate(
+        "() => getComputedStyle(document.documentElement).getPropertyValue('--line').trim()"
+    )
     assert more_line != light_line
     assert more_line == "#5f6862"
 
 
-def test_plot_zoom_controls_are_a_material_that_turns_solid_under_reduced_transparency(app: App) -> None:
+def test_plot_zoom_controls_are_a_material_that_turns_solid_under_reduced_transparency(
+    app: App,
+) -> None:
     group_id = ready_to_finalize(app)
     app.review_finalize()
     app.open_group(group_id)

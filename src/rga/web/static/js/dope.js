@@ -62,13 +62,7 @@ function render(rows) {
     cell(tr, signed(item.center_dy_mil), "num");
     cell(tr, item.centered_elevation_mil.toFixed(MIL), "num");
     cell(tr, String(item.shots), "num");
-    const notes = cell(tr, "");
-    if (item.includes_estimated) {
-      const badge = document.createElement("span");
-      badge.className = "badge warn";
-      badge.textContent = "includes estimated shots";
-      notes.appendChild(badge);
-    }
+    cell(tr, "");
   }
   mount.appendChild(table);
 }

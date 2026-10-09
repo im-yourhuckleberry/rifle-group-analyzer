@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Groups · Rifle Group Analyzer{% endblock %}
+{% from "new_group.html" import new_group_button, new_group_dialog %}
 {% block content %}
 <div data-page="groups" class="stack">
-  <h1>Groups</h1>
+  <div class="page-head">
+    <h1>Groups</h1>
+    <div class="page-actions">
+      {% if listing.rows %}<button type="button" class="secondary" id="groups-edit" aria-pressed="false" aria-controls="groups-edit-bar">Edit</button>{% endif %}
+      {{ new_group_button() }}
+    </div>
+  </div>
 
   <section class="card stack">
     <div class="row">
@@ -105,17 +112,25 @@
     <h2>{{ listing.total }} group{% if listing.total != 1 %}s{% endif %}{% if filtered %} match{% if listing.total == 1 %}es{% endif %}{% endif %}</h2>
     {% if listing.rows %}
     <p class="muted">Newest first. Showing {{ first_row }} to {{ first_row + listing.rows|length - 1 }}. Click a row to open the group. Sizes are extreme spread, center to center.</p>
+    <div class="edit-bar" id="groups-edit-bar" role="region" aria-label="Edit groups" hidden>
+      <span id="groups-selected" aria-live="polite">0 selected</span>
+      <button type="button" class="danger" id="groups-delete" disabled>Delete</button>
+      <button type="button" class="secondary" id="groups-edit-done">Done</button>
+    </div>
     <table data-groups-table>
       <thead>
         <tr>
+          <th class="select-cell"><input type="checkbox" id="groups-select-all" aria-label="Select every group on this page"></th>
           <th>When</th><th>Rifle</th><th>Load · lot</th><th class="num">Distance</th><th>Position</th><th>Suppressor</th>
           <th class="num">Shots</th><th>Extreme spread (in · MOA · mil)</th><th>Status</th><th>Purpose</th><th>Notes</th>
+          <th class="thumb-cell"><span class="visually-hidden">Photo preview</span></th>
         </tr>
       </thead>
       <tbody>
         {% for row in listing.rows %}
         {% set g = row.group %}
         <tr class="clickable" data-group-id="{{ g.id }}" data-href="/groups/{{ g.id }}">
+          <td class="select-cell"><input type="checkbox" class="group-select" value="{{ g.id }}" aria-label="Select the group of {{ g.shot_date }}, {{ row.rifle_name }}"></td>
           <td><a href="/groups/{{ g.id }}">{{ g.shot_date }}{% if g.shot_time %} {{ g.shot_time[:5] }}{% endif %}</a></td>
           <td>{{ row.rifle_name }}</td>
           <td>{{ row.load_label }} <span class="muted">· {{ row.lot_code }}</span></td>
@@ -123,10 +138,11 @@
           <td>{{ position_labels.get(g.position, g.position) }}</td>
           <td>{% if g.suppressor %}Suppressed{% if row.suppressor_name %} ({{ row.suppressor_name }}){% endif %}{% else %}None{% endif %}</td>
           <td class="num">{{ row.shot_count }} of {{ g.shots_expected }}</td>
-          <td>{% if row.size %}{{ "%.2f"|format(row.size[1]) }} in · {{ "%.2f"|format(row.size[2]) }} MOA · {{ "%.2f"|format(row.size[3]) }} mil{% if row.size[4] %} <span class="badge warn">includes estimated shots</span>{% endif %}{% else %}<span class="muted">none yet</span>{% endif %}</td>
+          <td>{% if row.size %}{{ "%.2f"|format(row.size[1]) }} in · {{ "%.2f"|format(row.size[2]) }} MOA · {{ "%.2f"|format(row.size[3]) }} mil{% else %}<span class="muted">none yet</span>{% endif %}</td>
           <td><span class="badge{% if g.status != 'final' %} warn{% endif %}">{{ status_labels.get(g.status, g.status) }}</span></td>
           <td>{{ row.purpose_label }}</td>
           <td class="muted">{{ row.notes_snippet }}</td>
+          <td class="thumb-cell">{% if g.photo_id %}<img class="row-thumb" alt="" data-thumb="/api/photos/{{ g.photo_id }}/image?variant=thumb">{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -141,11 +157,23 @@
     {% elif filtered %}
     <p class="muted">No groups match these filters. <a href="/groups">Clear filters</a>.</p>
     {% else %}
-    <p class="muted">No groups yet. Add one from a <a href="/rifles">rifle's page</a>.</p>
+    <p class="muted">No groups yet. Use <strong>Add new group</strong> to record one.</p>
     {% endif %}
   </section>
+  {{ new_group_dialog(new_group_rifles) }}
+  <dialog id="groups-delete-dialog" class="confirm-dialog" aria-labelledby="groups-delete-title" aria-describedby="groups-delete-text">
+    <h2 id="groups-delete-title">Delete <span id="groups-delete-count">these groups</span>?</h2>
+    <p id="groups-delete-text">Their shots and results are removed for good. This cannot be undone. Their photos stay.</p>
+    <p class="notice danger" id="groups-delete-error" role="alert" hidden></p>
+    <div class="confirm-actions">
+      <button type="button" id="groups-delete-cancel" class="confirm-cancel" autofocus>Cancel</button>
+      <button type="button" id="groups-delete-confirm" class="confirm-delete">Delete</button>
+    </div>
+  </dialog>
 </div>
 {% endblock %}
 {% block scripts %}
 <script type="module" src="/static/js/groups_list.js"></script>
+<script type="module" src="/static/js/new_group.js"></script>
+<script type="module" src="/static/js/groups_edit.js"></script>
 {% endblock %}

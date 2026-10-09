@@ -16,7 +16,7 @@ dependencies = { file = ["requirements.in"] }
 where = ["src"]
 
 [tool.setuptools.package-data]
-rga = ["db/migrations/*.sql", "web/templates/*.html", "web/static/**/*"]
+rga = ["db/migrations/*.sql", "web/templates/*.html", "web/static/**/*", "vision/learned/models/*"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"

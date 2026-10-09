@@ -158,13 +158,13 @@ def test_groups_of_different_loads_combine_with_a_warning(app: App, world: World
     assert result["warnings"] and "different loads" in result["warnings"][0]
 
 
-def test_estimated_shots_show_the_includes_estimated_badge(app: App, world: World) -> None:
+def test_estimated_shots_are_drawn_as_such_with_no_wording_badge(app: App, world: World) -> None:
     origins = [ShotOrigin.DETECTED] * 9 + [ShotOrigin.ESTIMATED]
     group = world.group(world.near, world.load_a, scatter(12), origins=origins)
     app.analysis_open()
     app.analysis_pick([group])
     result = app.analysis_aggregate()
-    assert result is not None and "includes estimated shots" in result["badges"]
+    assert result is not None and "includes estimated shots" not in result["badges"]
     assert app.page.locator("#aggregate-plot circle.shot.estimated").count() == 1
 
 

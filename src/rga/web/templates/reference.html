@@ -1,22 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Confirm reference · Rifle Group Analyzer{% endblock %}
+{% from "leave_dialog.html" import leave_dialog %}
 {% block content %}
-<h1>Confirm the printed reference</h1>
-<ol class="stepper" aria-label="Progress">
-  <li class="done">1. Photo imported</li>
-  <li class="current">2. Confirm reference</li>
-  <li>3. Review shots</li>
-</ol>
-<p class="muted">The app only proposes a reference. Nothing is measured until you pick one of the proposals or mark the reference yourself and press the confirm button.</p>
+<div class="flow-page">
+<div class="page-head">
+  <h1>Confirm the printed reference</h1>
+  <ol class="stepper" aria-label="Progress">
+    <li class="done">1. Group details</li>
+    <li class="current">2. Confirm reference</li>
+    <li>3. Set aim point</li>
+    <li>4. Review shots</li>
+  </ol>
+</div>
 
-<section id="reference-app" class="row"
+<section id="reference-app" class="row flow-body"
   data-photo-id="{{ photo.id }}"
   data-width="{{ photo.width_px }}"
   data-height="{{ photo.height_px }}"
   data-confirmed="{{ 1 if photo.reference_confirmed else 0 }}"
+  data-locked="{{ 1 if locked else 0 }}"
+  data-own-work="{{ 1 if own_work else 0 }}"
   data-review-url="{{ review_url or '' }}"
   data-return-to="{{ return_to }}">
-  <div class="grow">
+  <div class="grow flow-photo">
     <div class="zoom-toolbar" role="group" aria-label="Zoom and pan">
       <button type="button" id="zoom-out-button" class="secondary" aria-label="Zoom out">&minus;</button>
       <button type="button" id="zoom-in-button" class="secondary" aria-label="Zoom in">+</button>
@@ -29,41 +35,39 @@
         <svg id="overlay" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ photo.width_px }} {{ photo.height_px }}" aria-hidden="true"></svg>
       </div>
     </div>
-    <p class="muted" id="viewer-hint">Candidates are drawn on the photo. Choose one in the list, or switch to manual marking. Scroll to zoom and drag to pan.</p>
   </div>
 
-  <aside class="card stack grow">
-    {% if photo.reference_confirmed %}
-    {% if locked %}
-    <div class="notice info" id="already-confirmed">A reference is already confirmed for this photo (working image {{ photo.working_w }} x {{ photo.working_h }} px at {{ '%.1f'|format(photo.working_ppi) }} px/in). A group on this photo has saved shots or an aim. Use <strong>Change scale reference</strong> in the review editor to clear them and redo the scale. A finalized group locks the scale.</div>
-    {% else %}
-    <div class="notice info" id="already-confirmed">A reference is already confirmed for this photo (working image {{ photo.working_w }} x {{ photo.working_h }} px at {{ '%.1f'|format(photo.working_ppi) }} px/in). Confirming again replaces it and clears the saved detection regions of this photo's groups.</div>
+  <aside class="card stack grow flow-panel">
+    <p class="muted" id="reference-intro">Tell the app what is printed on your target, so it knows how big things are. It looks for it on the photo, but nothing is measured until you choose an outline (or mark the edge yourself) and confirm it.</p>
+    {% if own_work %}
+    <p class="muted" id="own-work-scale">Confirming a new scale clears this group's aim point and shots.</p>
     {% endif %}
+    {% if locked %}
+    <p class="muted" id="locked-scale">This photo's scale is fixed by another group on it. Press Next to go on.</p>
     {% endif %}
 
+    <div id="reference-controls" class="stack"{% if locked %} hidden{% endif %}>
     <div class="field">
       <label for="kind">What is printed on the target?</label>
       <select id="kind">
         {% for value, label in kinds %}
-        <option value="{{ value }}">{{ label }}</option>
+        <option value="{{ value }}"{% if value == default_kind %} selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>
 
-    <div class="actions">
-      <button type="button" id="find">Find reference automatically</button>
-      <button type="button" class="secondary" id="manual-toggle" aria-pressed="false">Mark it by hand</button>
+    <div class="segmented" role="group" aria-label="How to set the reference">
+      <button type="button" id="find" aria-pressed="false" aria-controls="candidates-panel">Find reference automatically</button>
+      <button type="button" id="manual-toggle" aria-pressed="false" aria-controls="manual-panel">Mark it by hand</button>
     </div>
 
     <div id="warnings" class="stack" role="status"></div>
 
     <div id="candidates-panel" hidden>
-      <h2>Proposals</h2>
+      <h2 id="candidates-title">Which outline is your printed circle?</h2>
+      <p class="muted" id="candidates-help">Each option is outlined and numbered on the photo. Point at an option to highlight it, then pick the one that sits exactly on the printed edge.</p>
       <p class="muted" id="candidates-empty" hidden>Nothing was found automatically. Mark the reference by hand.</p>
-      <div id="candidates" class="stack" role="radiogroup" aria-label="Proposed references"></div>
-      <div class="actions">
-        <button type="button" id="confirm-candidate" disabled>Use the selected proposal</button>
-      </div>
+      <div id="candidates" class="stack" role="radiogroup" aria-label="Outlines found on the photo"></div>
     </div>
 
     <div id="manual-panel" hidden>
@@ -83,20 +87,20 @@
       <div class="actions">
         <button type="button" class="secondary" id="undo-mark">Undo last mark</button>
         <button type="button" class="secondary" id="clear-marks">Clear marks</button>
-        <button type="button" id="confirm-manual" disabled>Use my marks</button>
       </div>
     </div>
 
-    <div id="result" class="stack" hidden>
-      <h2>Reference confirmed</h2>
-      <div id="result-warnings" class="stack"></div>
-      <div class="actions">
-        <a class="button" id="continue" href="/">Continue</a>
-      </div>
     </div>
+
+    <div class="actions">
+      <button type="button" id="reference-next"{% if not locked %} disabled{% endif %}>Next</button>
+    </div>
+    <p class="muted editor-hint" id="viewer-hint">Choose how to set the reference: find it automatically, or mark it by hand. Scroll to zoom and drag to pan.</p>
   </aside>
 </section>
+</div>
 {% endblock %}
 {% block scripts %}
 <script type="module" src="/static/js/reference.js"></script>
+{% if group_id %}{{ leave_dialog() }}{% endif %}
 {% endblock %}

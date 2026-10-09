@@ -808,7 +808,7 @@ def export_scenario_doc() -> dict:
 @pytest.mark.parametrize(
     ("mutate", "field"),
     [
-        (lambda d: d.update(reference_kind="circle_2in"), "reference_kind"),
+        (lambda d: d.update(reference_kind="circle_4in"), "reference_kind"),
         (lambda d: d.pop("reference_kind"), "reference_kind"),
         (lambda d: d.update(distance_yd=0), "distance_yd"),
         (lambda d: d.update(distance_yd="100"), "distance_yd"),

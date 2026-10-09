@@ -1,0 +1,13 @@
+{# "Leave this group?": shown by leave_guard.js when a link would leave a group that is still being
+   created (New group page, reference step, unfinished review). Keep working is the large default. #}
+{% macro leave_dialog() %}
+<dialog id="leave-dialog" class="confirm-dialog" aria-labelledby="leave-title" aria-describedby="leave-text">
+  <h2 id="leave-title">Leave this group?</h2>
+  <p id="leave-text">Are you sure? Progress you haven't saved on this group will be lost.</p>
+  <div class="confirm-actions">
+    <button type="button" id="leave-stay" class="confirm-cancel" autofocus>Keep working</button>
+    <button type="button" id="leave-go" class="confirm-delete">Leave</button>
+  </div>
+</dialog>
+<script type="module" src="/static/js/leave_guard.js"></script>
+{% endmacro %}

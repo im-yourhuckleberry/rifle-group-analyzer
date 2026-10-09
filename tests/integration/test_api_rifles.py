@@ -658,42 +658,6 @@ def page(client: TestClient, path: str) -> str:
     return response.text
 
 
-def test_the_dashboard_lists_rifles_zero_loads_and_recent_groups(client: TestClient, conn) -> None:
-    empty = page(client, "/")
-    assert "No rifles yet" in empty and "No groups yet" in empty
-    rifle = seed_rifle(conn, name="Dash Rifle")
-    load = seed_load(conn, rifle, label="Zero load X")
-    with conn:
-        conn.execute("UPDATE rifles SET zero_load_id = ? WHERE id = ?", (load.id, rifle.id))
-    group = seed_group(
-        conn,
-        context=seed_context(rifle, distance_yd=300),
-        load=load,
-        offsets=[Offset(0.1, 0.1), Offset(-0.1, 0.0)],
-    )
-    html = page(client, "/")
-    assert "Dash Rifle" in html and "Zero load X" in html
-    assert f'href="/groups/{group.id}"' in html and "300 yd" in html
-    assert "No rifles yet" not in html and "No groups yet" not in html
-
-
-def test_the_dashboard_shows_only_the_ten_newest_groups(client: TestClient, conn) -> None:
-    rifle = seed_rifle(conn)
-    load = seed_load(conn, rifle)
-    ids = [
-        seed_group(
-            conn,
-            context=seed_context(rifle, date=f"2026-01-{day:02d}"),
-            load=load,
-            offsets=[Offset(0.1, 0.1)],
-        ).id
-        for day in range(1, 13)
-    ]
-    html = page(client, "/")
-    shown = {int(i) for i in re.findall(r'href="/groups/(\d+)"', html)}
-    assert shown == set(ids[2:])
-
-
 def test_the_rifles_page_lists_rifles_and_has_the_new_rifle_form(client: TestClient, conn) -> None:
     seed_rifle(conn, name="List Rifle", cartridge=".243 Win")
     html = page(client, "/rifles")
@@ -768,7 +732,7 @@ def test_user_text_is_escaped_on_every_page(client: TestClient, conn) -> None:
 def test_the_pages_have_no_native_form_posts_and_no_inline_code(client: TestClient, conn) -> None:
     rifle = seed_rifle(conn)
     seed_load(conn, rifle)
-    for path in ("/", "/rifles", f"/rifles/{rifle.id}"):
+    for path in ("/rifles", f"/rifles/{rifle.id}"):
         html = page(client, path)
         for form in re.findall(r"<form\b[^>]*>", html):
             assert "action=" not in form and "method=" not in form, form
@@ -999,14 +963,12 @@ def test_only_this_rifles_zeros_are_listed(client: TestClient) -> None:
     assert f'href="/zeroing/{theirs["id"]}"' not in html
 
 
-def test_no_correction_or_dialed_number_appears_on_the_rifle_or_dashboard_pages(
-    client: TestClient, conn
-) -> None:
+def test_no_correction_or_dialed_number_appears_on_the_rifle_page(client: TestClient, conn) -> None:
     rifle = make_rifle(client)
     load = make_load(client, rifle["id"])
     zero = start_zero(client, rifle["id"], load["id"])
     set_state(conn, zero["id"], "complete", dialed=True)
-    for path in (f"/rifles/{rifle['id']}", "/"):
+    for path in (f"/rifles/{rifle['id']}",):
         html = page(client, path)
         assert f'href="/zeroing/{zero["id"]}"' in html
         for leaked in (str(DIALED_UP), str(DIALED_RIGHT), "7.65", "2.34"):
@@ -1015,50 +977,23 @@ def test_no_correction_or_dialed_number_appears_on_the_rifle_or_dashboard_pages(
         assert not re.search(r"\bmils?\b|dialed|correction", shown, re.IGNORECASE), path
 
 
-def test_the_dashboard_shows_only_active_zeros(client: TestClient, conn) -> None:
-    rifle = make_rifle(client, name="Active Rifle")
-    bare = make_rifle(client, name="Bare Rifle")
-    load_a = make_load(client, rifle["id"], label="Load A")
-    load_b = make_load(client, rifle["id"], label="Load B")
-    superseded = start_zero(client, rifle["id"], load_a["id"])
-    active_a = start_zero(client, rifle["id"], load_a["id"], lot_code="LOT-9")
-    active_b = start_zero(client, rifle["id"], load_b["id"])
-    draft = start_zero(client, rifle["id"], load_b["id"])
-    set_state(conn, superseded["id"], "superseded")
-    set_state(conn, active_a["id"], "complete")
-    set_state(conn, active_b["id"], "complete")
-    set_state(conn, draft["id"], "step3_dot")
-    html = page(client, "/")
-    cell = html.split(f'data-active-zeros="{rifle["id"]}"')[1].split("</td>")[0]
-    assert f'href="/zeroing/{active_a["id"]}"' in cell and "Load A (LOT-9)" in cell
-    assert f'href="/zeroing/{active_b["id"]}"' in cell and "Load B" in cell
-    assert f'/zeroing/{superseded["id"]}"' not in html and f'/zeroing/{draft["id"]}"' not in html
-    bare_cell = html.split(f'data-active-zeros="{bare["id"]}"')[1].split("</td>")[0]
-    assert "none" in bare_cell and "/zeroing/" not in bare_cell
-
-
-def test_a_zero_that_is_superseded_after_completion_leaves_the_dashboard(
+def test_a_zero_that_is_superseded_after_completion_says_so_on_the_rifle_page(
     client: TestClient, conn
 ) -> None:
     rifle = make_rifle(client)
     load = make_load(client, rifle["id"])
     zero = start_zero(client, rifle["id"], load["id"])
     set_state(conn, zero["id"], "complete")
-    assert f'href="/zeroing/{zero["id"]}"' in page(client, "/")
     set_state(conn, zero["id"], "superseded")
-    html = page(client, "/")
-    assert f'/zeroing/{zero["id"]}"' not in html
     assert "Superseded" in page(client, f"/rifles/{rifle['id']}")
 
 
-def test_zero_labels_and_lots_are_escaped_on_the_rifle_and_dashboard_pages(
-    client: TestClient, conn
-) -> None:
+def test_zero_labels_and_lots_are_escaped_on_the_rifle_page(client: TestClient, conn) -> None:
     rifle = make_rifle(client, name="Escape Rifle")
     load = make_load(client, rifle["id"], label=XSS)
     zero = start_zero(client, rifle["id"], load["id"], lot_code=XSS)
     set_state(conn, zero["id"], "complete")
-    for path in (f"/rifles/{rifle['id']}", "/"):
+    for path in (f"/rifles/{rifle['id']}",):
         html = page(client, path)
         assert XSS not in html and "&lt;script&gt;alert(1)&lt;/script&gt;" in html, path
         tags = re.findall(r"<script\b[^>]*>", html)
@@ -1119,11 +1054,11 @@ def test_the_start_a_zero_script_posts_the_form_through_api_js_and_opens_the_zer
     assert "textContent" not in wire and "innerHTML" not in wire
 
 
-def test_the_rifle_and_dashboard_routes_read_zeros_only_through_the_service() -> None:
-    for name in ("rifles.py", "dashboard.py"):
-        source = (WEB / "routes" / name).read_text()
-        assert "zeroing as zeroing_service" in source
-        assert "repo_zeroing" not in source and "rga.db" not in source, name
+def test_the_rifle_route_reads_zeros_only_through_the_service() -> None:
+    source = (WEB / "routes" / "rifles.py").read_text()
+    assert "zeroing as zeroing_service" in source
+    assert "repo_zeroing" not in source and "rga.db" not in source
+    assert "rga.db" not in (WEB / "routes" / "dashboard.py").read_text()
 
 
 def _playwright_ready() -> bool:

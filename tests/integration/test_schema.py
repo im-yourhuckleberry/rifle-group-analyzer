@@ -680,7 +680,7 @@ CHECK_VIOLATIONS = [
     ("zeros", {"mode": "fresh"}, "mode IN"),
     ("zeros", {"state": "step4"}, "state IN"),
     ("zero_checks", {"result": "maybe"}, "result IN"),
-    ("photos", {"reference_kind": "circle_2in"}, "reference_kind IS NULL OR reference_kind IN"),
+    ("photos", {"reference_kind": "circle_4in"}, "reference_kind IS NULL OR reference_kind IN"),
     (
         "photos",
         {"reference_confirmed": 2, "h_px_to_plane_json": "[[1]]", "working_ppi": 200.0},
@@ -1695,12 +1695,12 @@ def test_the_runner_verifies_both_foreign_key_switches(
     conn.close()
 
 
-def test_005_starts_with_the_directive_and_only_005_does() -> None:
+def test_only_the_table_rebuilds_005_and_007_start_with_the_directive() -> None:
     first_lines = {
         number: sql.split("\n", 1)[0] for number, _, sql in db_connection._migration_files()
     }
     assert first_lines[5] == DIRECTIVE
-    assert [n for n, line in first_lines.items() if line == DIRECTIVE] == [5]
+    assert [n for n, line in first_lines.items() if line == DIRECTIVE] == [5, 7]
 
 
 @pytest.mark.parametrize(

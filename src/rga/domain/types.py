@@ -11,6 +11,8 @@ class ReferenceKind(StrEnum):
     GRID_1IN = "grid_1in"
     CIRCLE_1IN = "circle_1in"
     CIRCLE_1_5IN = "circle_1_5in"
+    CIRCLE_2IN = "circle_2in"
+    CIRCLE_2_5IN = "circle_2_5in"
     CIRCLE_3IN = "circle_3in"
 
 
@@ -18,6 +20,8 @@ REFERENCE_SIZE_IN: dict[ReferenceKind, float] = {
     ReferenceKind.GRID_1IN: 1.0,
     ReferenceKind.CIRCLE_1IN: 1.0,
     ReferenceKind.CIRCLE_1_5IN: 1.5,
+    ReferenceKind.CIRCLE_2IN: 2.0,
+    ReferenceKind.CIRCLE_2_5IN: 2.5,
     ReferenceKind.CIRCLE_3IN: 3.0,
 }
 

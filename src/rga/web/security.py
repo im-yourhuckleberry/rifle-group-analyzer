@@ -8,14 +8,21 @@ response. `safe_return_to` validates redirect targets.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.requests import cookie_parser
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 ALLOWED_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost", "[::1]")
+STATIC_PREFIX = "/static/"
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 ALLOWED_MEDIA_TYPES = frozenset({"application/json", "multipart/form-data"})
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+BUILD_COOKIE = "rga_build"
 SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "Content-Security-Policy": (
@@ -32,19 +39,36 @@ def host_guard(app: ASGIApp) -> ASGIApp:
     return TrustedHostMiddleware(app, allowed_hosts=list(ALLOWED_HOSTS), www_redirect=False)
 
 
+def static_build_id(root: Path = STATIC_DIR) -> str:
+    """A short hash of every static file's path and bytes: it changes exactly when the scripts or
+    styles do."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
 class SecurityHeaders:
     """Add `SECURITY_HEADERS` to every HTTP response that does not already carry them.
 
     Install outermost so guard refusals (Host 400, Origin 403, media-type 415) are covered.
+    A page served to a browser that last saw other static files (its `rga_build` cookie differs
+    from `build_id`) also clears that browser's cache, so a copy cached before an upgrade (even
+    one cached without `no-cache`) never runs against the new pages.
     """
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, build_id: str | None = None) -> None:
         self.app = app
+        self.build_id = build_id or static_build_id()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+
+        cookies = cookie_parser(Headers(scope=scope).get("cookie", ""))
+        stale = cookies.get(BUILD_COOKIE) != self.build_id
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -52,6 +76,15 @@ class SecurityHeaders:
                 headers = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
                     headers.setdefault(name, value)
+                if scope["path"].startswith(STATIC_PREFIX):
+                    # Revalidate (cheap: ETag) so an upgraded page never runs a stale script.
+                    headers.setdefault("Cache-Control", "no-cache")
+                elif stale and headers.get("content-type", "").startswith("text/html"):
+                    headers["Clear-Site-Data"] = '"cache"'
+                    headers.append(
+                        "Set-Cookie",
+                        f"{BUILD_COOKIE}={self.build_id}; Path=/; SameSite=Strict; HttpOnly",
+                    )
             await send(message)
 
         await self.app(scope, receive, send_with_headers)

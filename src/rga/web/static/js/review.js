@@ -1,24 +1,25 @@
 /**
- * Review editor page: shows the proposed or stored shots over the working image, lets the user
- * add, drag and remove them, mark the aim point, set the expected count and a region, then saves
- * and finalizes. All requests go through api.js; user-visible text is set with textContent only.
- * The page shows size (extreme spread) and counts, never a point of impact.
+ * Review editor page, in two steps shown one at a time. Step "aim": only the aim point is drawn.
+ * With a printed-circle reference it starts on the circle's exact centre ("Use the circle's
+ * center"); "Mark it by hand" (or any click on the photo) places it exactly where clicked, with no
+ * snapping (the printed mark is often shot out), and a drag fine-tunes it. Confirming saves it.
+ * Step "shots": the proposed or stored shots are drawn and the user adds, drags and removes them,
+ * sets the expected count and a region, then saves and finalizes. Each step has a Go back button
+ * (shots -> aim -> the reference page). A region holds every detected shot: detected shots outside
+ * it are dropped, only the user's own (manual or moved) shots may lie outside.
+ * All requests go through api.js; user-visible text is set with textContent only.
+ * The page shows shot counts, never a size or a point of impact.
  */
 import { ApiError, apiSend } from "/static/js/api.js";
 import { BUTTON_ZOOM_STEP, createEditor } from "/static/js/svg_editor.js";
 
-const MOA_IN_PER_100YD = 1.0471975512;
 const MAX_EXPECTED = 200;
 const NO_PAIR_COST = 1e6;
-const RING_CLICK_REACH = 1.3;
-const AIM_RING_IN = 0.22;
 const UNDO_LIMIT = 50;
-const AIM_KIND_LABELS = {
-  paster_center: "paster center",
-  dot_center: "dot center",
-  diamond_center: "diamond center",
-  cross_center: "cross center",
-  grid_intersection: "grid crossing",
+const AIM_HINT = "Scroll to zoom and drag to pan. Click where you aimed to place the aim point there, then drag it to fine-tune it.";
+const AIM_HELP = {
+  center: "The aim point is on the exact center of your printed circle. To aim somewhere else, choose Mark it by hand or click the photo.",
+  hand: "Click where you aimed: the aim point goes exactly there (it does not snap to the printed mark, which holes often cover). Drag it to fine-tune it.",
 };
 const EDIT_HINT =
   "Scroll to zoom and drag empty space to pan. Click an empty spot to add a shot (or to deselect), drag a shot to move it, select one and use Not a bullet hole to remove it. Undo (\u2318Z) takes back the last change.";
@@ -45,22 +46,21 @@ const els = {
   changeContinue: document.getElementById("reference-change-continue"),
   changeCancel: document.getElementById("reference-change-cancel"),
   counter: document.getElementById("shot-counter"),
-  spread: document.getElementById("spread-line"),
-  estimated: document.getElementById("estimated-badge"),
   expected: document.getElementById("expected-input"),
   detect: document.getElementById("detect-button"),
-  region: document.getElementById("region-button"),
-  fill: document.getElementById("fill-button"),
-  aim: document.getElementById("aim-button"),
+  stepAim: document.getElementById("step-aim"),
+  stepShots: document.getElementById("step-shots"),
+  stepperAim: document.getElementById("stepper-aim"),
+  stepperShots: document.getElementById("stepper-shots"),
+  confirmAim: document.getElementById("aim-confirm-button"),
+  shotsBack: document.getElementById("shots-back-button"),
   remove: document.getElementById("delete-button"),
   undo: document.getElementById("undo-button"),
   aimStatus: document.getElementById("aim-status"),
-  suggestion: document.getElementById("aim-suggestion"),
-  suggestionText: document.getElementById("aim-suggestion-text"),
-  useAim: document.getElementById("aim-use-button"),
-  nextAim: document.getElementById("aim-next-button"),
-  manualAim: document.getElementById("aim-manual-button"),
-  save: document.getElementById("save-button"),
+  aimMode: document.getElementById("aim-mode"),
+  aimCenterToggle: document.getElementById("aim-center-toggle"),
+  aimHandToggle: document.getElementById("aim-hand-toggle"),
+  aimHelp: document.getElementById("aim-help"),
   finalize: document.getElementById("finalize-button"),
   finalizeBox: document.getElementById("finalize-confirm"),
   finalizeConfirm: document.getElementById("finalize-confirm-button"),
@@ -69,7 +69,6 @@ const els = {
   zoomIn: document.getElementById("zoom-in-button"),
   zoomOut: document.getElementById("zoom-out-button"),
   zoomFit: document.getElementById("zoom-fit-button"),
-  zoomRegion: document.getElementById("zoom-region-button"),
   zoomLevel: document.getElementById("zoom-level"),
   wrap: document.getElementById("editor-wrap"),
 };
@@ -77,9 +76,8 @@ const els = {
 // activity -> [button, idle label, working label].
 const BUSY_LABELS = {
   detect: [els.detect, "Detect holes", "Detecting holes\u2026"],
-  fill: [els.fill, "Fill shortfall", "Filling\u2026"],
-  save: [els.save, "Save", "Saving\u2026"],
-  finalize: [els.finalizeConfirm, "Finalize group", "Finalizing\u2026"],
+  save: [els.finalize, "Done", "Saving\u2026"],
+  finalize: [els.finalizeConfirm, "Lock and finish", "Finishing\u2026"],
 };
 
 let storedExpected = server.shots_expected;
@@ -90,14 +88,25 @@ const model = {
   expected: server.shots_expected,
   region: server.roi_px ? [server.roi_px.x0, server.roi_px.y0, server.roi_px.x1, server.roi_px.y1] : null,
   selected: null,
+  // Without a confirmed reference no aim can be placed, so the page keeps its notices on "shots".
+  step: isFinal || server.aim || !hasFrame ? "shots" : "aim",
   mode: "edit",
   busy: false,
   activity: null,
-  suggestions: [],
-  suggestionIndex: -1,
 };
 // Snapshots of the shots and rejections taken before each change, newest last.
 const history = [];
+// The confirmed circle reference's centre, offered as the aim (null for a grid reference).
+const circleCenter = server.reference_center;
+// How the aim is set: "center" (a circle reference's centre, the default unless a saved aim sits
+// elsewhere) or "hand". The last hand-placed aim comes back when switching to "hand" again.
+const aimAtCenter = (aim) =>
+  circleCenter !== null && aim !== null && Math.hypot(aim.x_in - circleCenter.x_in, aim.y_in - circleCenter.y_in) < 1e-6;
+const aimMode = { mode: circleCenter !== null && (!model.aim || aimAtCenter(model.aim)) ? "center" : "hand", handAim: null };
+if (aimMode.mode === "center" && !isFinal && hasFrame) model.aim = { ...circleCenter };
+if (aimMode.mode === "hand") aimMode.handAim = model.aim;
+let aimNote = "";
+let shotsOpened = false;
 
 function remember() {
   history.push({
@@ -108,7 +117,7 @@ function remember() {
 }
 
 function undo() {
-  if (isFinal || model.busy || history.length === 0) return;
+  if (isFinal || model.busy || model.step !== "shots" || history.length === 0) return;
   const previous = history.pop();
   model.shots = previous.shots;
   model.rejections = previous.rejections;
@@ -168,19 +177,6 @@ function failure(error) {
   }
 }
 
-function extremeSpreadIn() {
-  let best = 0;
-  for (let i = 0; i < model.shots.length; i += 1) {
-    for (let j = i + 1; j < model.shots.length; j += 1) {
-      best = Math.max(
-        best,
-        Math.hypot(model.shots[i].x_in - model.shots[j].x_in, model.shots[i].y_in - model.shots[j].y_in),
-      );
-    }
-  }
-  return best;
-}
-
 function finalizeBlocker() {
   if (isFinal) return "This group is already final.";
   if (hasPhoto && !server.reference_confirmed) return "Confirm the reference object on the photo first.";
@@ -196,50 +192,47 @@ function finalizeBlocker() {
 }
 
 function refresh() {
+  const onAim = model.step === "aim";
+  els.stepAim.hidden = !onAim;
+  els.stepShots.hidden = onAim;
+  els.stepperAim.className = onAim ? "current" : "done";
+  els.stepperShots.className = onAim ? "" : "current";
   const count = model.shots.length;
   els.counter.textContent = `${count} of ${model.expected} shots`;
   els.counter.classList.toggle("mismatch", count !== model.expected);
-  if (count >= 2) {
-    const es = extremeSpreadIn();
-    const moa = es / ((MOA_IN_PER_100YD * server.distance_yd) / 100);
-    els.spread.textContent = `Extreme spread ${es.toFixed(2)} in (${moa.toFixed(2)} MOA), smallest target every shot hit (center-to-center)`;
-  } else {
-    els.spread.textContent = "";
-  }
-  els.estimated.hidden = !model.shots.some((s) => s.origin === "estimated");
   els.expected.value = String(model.expected);
-  const suggesting = !isFinal && !model.aim && model.suggestions.length > 0;
-  els.suggestion.hidden = !suggesting;
-  if (suggesting) {
-    const current = model.suggestions[model.suggestionIndex];
-    els.suggestionText.textContent = current
-      ? `Suggested aim ${model.suggestionIndex + 1} of ${model.suggestions.length}: ${current.label}. It is not set until you use it.`
-      : `${model.suggestions.length} possible aim mark(s) found, none selected. Click a ring or use Next to pick one, then use it, or place the aim yourself.`;
-  }
-  els.useAim.disabled = !suggesting || model.suggestionIndex < 0 || model.busy;
-  els.nextAim.disabled =
-    !suggesting || (model.suggestionIndex >= 0 && model.suggestions.length < 2) || model.busy;
-  els.manualAim.disabled = !suggesting || model.busy;
+  const centerMode = aimMode.mode === "center";
+  els.aimMode.hidden = isFinal || circleCenter === null;
+  els.aimCenterToggle.setAttribute("aria-pressed", String(centerMode));
+  els.aimHandToggle.setAttribute("aria-pressed", String(!centerMode));
+  els.aimCenterToggle.disabled = model.busy;
+  els.aimHandToggle.disabled = model.busy;
+  els.aimHelp.textContent = AIM_HELP[aimMode.mode];
   els.remove.disabled = isFinal || model.selected === null || model.busy;
   els.undo.disabled = isFinal || history.length === 0 || model.busy;
-  els.aimStatus.textContent = model.aim ? "Aim point is set." : "Aim point is not set.";
+  els.aimStatus.textContent = !model.aim
+    ? "Click the photo where you aimed."
+    : centerMode
+      ? "Aim point: the circle's exact center."
+      : aimNote || "Aim point is set.";
+  els.confirmAim.disabled = isFinal || !model.aim || model.busy;
+  els.shotsBack.hidden = isFinal;
+  els.shotsBack.disabled = model.busy;
   const blocker = finalizeBlocker();
-  els.finalize.disabled = blocker !== "" || model.busy;
+  // Done is always available: it saves, and offers to lock the group once nothing blocks it.
+  els.finalize.disabled = isFinal || !hasFrame || model.busy;
   if (blocker !== "") els.finalizeBox.hidden = true;
   els.finalizeConfirm.disabled = model.busy;
   els.finalizeCancel.disabled = model.busy;
   els.reason.textContent = blocker;
-  els.aim.textContent = model.mode === "aim" ? "Click the aim mark" : "Mark aim";
-  els.region.textContent = model.mode === "region" ? "Drag a region" : model.region ? "Change region" : "Set region";
   for (const [key, [button, idle, working]] of Object.entries(BUSY_LABELS)) {
     button.textContent = model.activity === key ? working : idle;
   }
-  els.wrap.setAttribute("aria-busy", String(model.activity === "detect" || model.activity === "fill"));
-  for (const button of [els.detect, els.fill, els.save, els.aim, els.region]) {
+  els.wrap.setAttribute("aria-busy", String(model.activity === "detect"));
+  for (const button of [els.detect]) {
     button.disabled = isFinal || !hasFrame || model.busy;
   }
   for (const button of [els.zoomIn, els.zoomOut, els.zoomFit]) button.disabled = !hasFrame;
-  els.zoomRegion.disabled = !hasFrame || model.region === null;
   els.expected.disabled = isFinal || model.busy;
   if (referenceChange) {
     els.changeButton.disabled = referenceChange.mode === "blocked" || model.busy;
@@ -248,25 +241,37 @@ function refresh() {
   }
   if (editor) {
     editor.render({
-      shots: model.shots,
-      selected: model.selected,
+      shots: onAim ? [] : model.shots,
+      selected: onAim ? null : model.selected,
       aim: model.aim,
-      region: model.region,
-      aimCandidates: suggesting ? model.suggestions : [],
-      activeCandidate: model.suggestionIndex,
+      region: onAim ? null : model.region,
+      aimCandidates: [],
+      activeCandidate: -1,
     });
   }
 }
 
+function hintText() {
+  if (!hasFrame || isFinal) return "";
+  if (model.step === "aim") return AIM_HINT;
+  return model.mode === "region" ? "Drag a rectangle around this group's holes, then use Detect holes." : EDIT_HINT;
+}
+
 function setMode(mode) {
+  // Shots step only: toggles the region tool. The aim step keeps the editor in aim mode.
   model.mode = model.mode === mode ? "edit" : mode;
   if (editor) editor.setMode(model.mode);
-  els.hint.textContent =
-    model.mode === "aim"
-      ? "Click on the aim mark; it snaps to the centre of the mark."
-      : model.mode === "region"
-        ? "Drag a rectangle around this group's holes, then use Detect holes."
-        : EDIT_HINT;
+  els.hint.textContent = hintText();
+  refresh();
+}
+
+function showStep(step) {
+  model.step = step;
+  model.selected = null;
+  model.mode = step === "aim" ? "aim" : "edit";
+  if (editor) editor.setMode(model.mode);
+  els.hint.textContent = hintText();
+  els.finalizeBox.hidden = true;
   refresh();
 }
 
@@ -289,14 +294,32 @@ function isUnsavedProposal(shot) {
   return !shot.saved && !shot.moved_by_user && shot.origin !== "manual";
 }
 
+function isUserPlaced(shot) {
+  return shot.origin === "manual" || shot.moved_by_user;
+}
+
+function outsideRegion(shot) {
+  if (!model.region) return false;
+  const [x0, y0, x1, y1] = model.region;
+  const x = shot.x_in * server.frame.ppi;
+  const y = shot.y_in * server.frame.ppi;
+  return x < x0 || x > x1 || y < y0 || y > y1;
+}
+
+function inRegionOrUserPlaced(shot) {
+  return isUserPlaced(shot) || !outsideRegion(shot);
+}
+
 function mergeProposal(proposal, replaceUnsavedProposals = false, undoable = true) {
   // Unmoved estimated shots are placeholders the proposal replaces. A Detect inside a region also
   // replaces the earlier unsaved, unmoved proposals (the whole-photo guess); saved, moved and
   // manual shots always stay.
+  // With a region, detected shots outside it go too, saved or not; the user's own shots stay.
   const replaceable = (s) => isPlaceholder(s) || (replaceUnsavedProposals && isUnsavedProposal(s));
   if (undoable) remember();
-  const kept = model.shots.filter((s) => !replaceable(s));
-  const fresh = unmatchedProposals(kept, proposal.shots.map(fromProposal), proposal.bullet_diameter_in);
+  const kept = model.shots.filter((s) => !replaceable(s) && inRegionOrUserPlaced(s));
+  const proposed = proposal.shots.map(fromProposal).filter(inRegionOrUserPlaced);
+  const fresh = unmatchedProposals(kept, proposed, proposal.bullet_diameter_in);
   model.shots = [...kept, ...fresh];
   model.selected = null;
   showNotices(proposal.messages, "info");
@@ -373,61 +396,26 @@ function assignMinimum(cost) {
   return pairs;
 }
 
-function suggestAims(candidates) {
-  model.suggestions = model.aim
-    ? []
-    : candidates.map((c) => ({
-        x_in: c.x_in,
-        y_in: c.y_in,
-        label: AIM_KIND_LABELS[c.kind] || "mark",
-      }));
-  model.suggestionIndex = -1;
-}
-
-function useSuggestedAim() {
-  const chosen = model.suggestions[model.suggestionIndex];
-  if (!chosen || model.aim) return;
-  model.aim = { x_in: chosen.x_in, y_in: chosen.y_in };
-  model.suggestions = [];
-  els.aimStatus.textContent = "Aim set from the suggested mark.";
+function setAimMode(mode) {
+  if (isFinal || model.busy || model.step !== "aim" || circleCenter === null || aimMode.mode === mode) return;
+  if (mode === "center") {
+    aimMode.handAim = model.aim;
+    model.aim = { ...circleCenter };
+  } else {
+    model.aim = aimMode.handAim;
+    aimNote = "";
+  }
+  aimMode.mode = mode;
   refresh();
 }
 
-function nextSuggestedAim() {
-  if (model.suggestions.length === 0 || (model.suggestionIndex >= 0 && model.suggestions.length < 2)) return;
-  model.suggestionIndex = (model.suggestionIndex + 1) % model.suggestions.length;
+function placeAim(aim, note) {
+  // By hand, exactly where it was put: no snapping to the printed mark, which holes often hide.
+  aimMode.mode = "hand";
+  aimMode.handAim = aim;
+  model.aim = aim;
+  aimNote = note;
   refresh();
-}
-
-function selectRingAt(event) {
-  // A click on a suggestion ring selects it; anywhere else the editor handles the click as usual.
-  if (event.button !== 0 || model.mode !== "edit" || isFinal || model.busy) return;
-  if (model.aim || model.suggestions.length === 0) return;
-  const point = els.svg.createSVGPoint();
-  point.x = event.clientX;
-  point.y = event.clientY;
-  const at = point.matrixTransform(els.svg.getScreenCTM().inverse());
-  const reach = AIM_RING_IN * server.frame.ppi * RING_CLICK_REACH;
-  let best = -1;
-  let bestDistance = reach;
-  model.suggestions.forEach((candidate, index) => {
-    const distance = Math.hypot(candidate.x_in * server.frame.ppi - at.x, candidate.y_in * server.frame.ppi - at.y);
-    if (distance <= bestDistance) {
-      best = index;
-      bestDistance = distance;
-    }
-  });
-  if (best < 0) return;
-  event.stopImmediatePropagation();
-  event.preventDefault();
-  model.suggestionIndex = best;
-  refresh();
-}
-
-function placeAimYourself() {
-  model.suggestions = [];
-  if (model.mode !== "aim") setMode("aim");
-  else refresh();
 }
 
 async function guarded(action, activity = null) {
@@ -452,6 +440,12 @@ function readExpected() {
     throw new ApiError(`The expected shot count must be a whole number from 1 to ${MAX_EXPECTED}.`, "invalid_shots_expected", 0);
   }
   model.expected = value;
+}
+
+function regionBody() {
+  return model.region
+    ? { roi_px: { x0: model.region[0], y0: model.region[1], x1: model.region[2], y1: model.region[3] } }
+    : {};
 }
 
 function adopt(detail) {
@@ -481,57 +475,65 @@ async function save() {
   return detail;
 }
 
-const SHARED_PHOTO_NOTICE =
-  "Draw a region first: other groups share this photo, so drag a rectangle around this group's holes, then use Detect holes.";
-
-let sharedNoticeShown = false;
-
-function mustDrawRegion() {
-  return !isFinal && server.other_groups_on_photo > 0 && model.region === null;
-}
-
 async function detect(automatic = false) {
-  if (mustDrawRegion()) {
-    showNotices([SHARED_PHOTO_NOTICE], "info");
-    sharedNoticeShown = true;
-    if (model.mode !== "region") setMode("region");
-    return;
-  }
-  if (sharedNoticeShown) {
-    showNotices([]);
-    sharedNoticeShown = false;
-  }
+  // Always the whole photo (or the stored region): a photo other groups share is detected too, and
+  // a hole that belongs to another group comes off with "Not a bullet hole".
   readExpected();
   if (model.expected !== storedExpected) await save();
-  const body = model.region
-    ? { roi_px: { x0: model.region[0], y0: model.region[1], x1: model.region[2], y1: model.region[3] } }
-    : {};
-  const proposal = await apiSend("POST", `/api/groups/${groupId}/detect`, body);
+  const proposal = await apiSend("POST", `/api/groups/${groupId}/detect`, regionBody());
   mergeProposal(proposal, model.region !== null, !automatic);
-  suggestAims(proposal.aim_candidates || []);
 }
 
-async function fillShortfall() {
-  await save();
-  mergeProposal(await apiSend("POST", `/api/groups/${groupId}/fill-shortfall`));
+async function openShots() {
+  // The first visit to the shots step brings in the detection (Undo does not take it back).
+  if (shotsOpened || isFinal || !hasFrame) return;
+  shotsOpened = true;
+  if (model.shots.length > 0 || model.rejections.length > 0) return;
+  await guarded(() => detect(true), "detect");
 }
 
-async function clickAim(xPx, yPx) {
+async function confirmAim() {
+  if (!model.aim || model.busy) return;
+  let saved = false;
   await guarded(async () => {
-    const snap = await apiSend("POST", `/api/photos/${server.photo_id}/snap-aim`, { x_px: xPx, y_px: yPx });
-    model.aim = { x_in: snap.x_in, y_in: snap.y_in };
-    model.suggestions = [];
-    els.aimStatus.textContent = snap.snapped ? "Aim snapped to the mark." : "Aim set where you clicked.";
-    model.mode = "edit";
-    editor.setMode("edit");
-  });
+    await save();
+    saved = true;
+  }, "save");
+  if (!saved) return;
+  showStep("shots");
+  await openShots();
 }
 
-function askFinalize() {
+function backToAim() {
+  if (model.busy || isFinal) return;
+  showStep("aim");
+}
+
+function clickAim(xPx, yPx) {
+  if (isFinal || model.busy || model.step !== "aim") return;
+  placeAim({ x_in: xPx / server.frame.ppi, y_in: yPx / server.frame.ppi }, "Aim point is set where you clicked.");
+}
+
+async function done() {
+  // Done saves the work; when the group is ready it then asks to lock it (finalize), else it says
+  // what is still missing.
   if (els.finalize.disabled) return;
+  let saved = false;
+  await guarded(async () => {
+    await save();
+    saved = true;
+  }, "save");
+  if (!saved) return;
+  const blocker = finalizeBlocker();
+  if (blocker !== "") {
+    flash(`Saved. To finish: ${blocker}`, true);
+    return;
+  }
+  clearFlash();
   els.finalizeBox.hidden = false;
   els.finalizeConfirm.focus();
 }
+
 
 function cancelFinalize() {
   els.finalizeBox.hidden = true;
@@ -577,6 +579,7 @@ async function resetReference() {
 function setUpReferenceChange() {
   if (!referenceChange) return;
   els.changeBox.hidden = false;
+  els.changeButton.hidden = false;
   els.changeReason.textContent = referenceChange.reason || "";
   els.changeButton.addEventListener("click", changeReference);
   els.changeContinue.addEventListener("click", resetReference);
@@ -618,6 +621,13 @@ if (hasFrame) {
     radiusIn: server.bullet_diameter_in / 2,
     onAdd(xIn, yIn) {
       if (isFinal) return;
+      if (model.shots.length >= model.expected) {
+        // Never more shots than were fired: a click past the expected count adds nothing.
+        flash(
+          `Already ${model.shots.length} of ${model.expected} shots. Remove one with Not a bullet hole, or raise Shots fired.`,
+        );
+        return;
+      }
       remember();
       model.shots.push({ x_in: xIn, y_in: yIn, origin: "manual", moved_by_user: false, confidence: null, saved: false });
       refresh();
@@ -638,10 +648,23 @@ if (hasFrame) {
       refresh();
     },
     onAimClick: clickAim,
+    onAimMove(xIn, yIn, done) {
+      // Dragging the placed aim mark: it stays exactly where it is dropped (no snap).
+      if (isFinal || model.busy || model.step !== "aim") return;
+      placeAim({ x_in: xIn, y_in: yIn }, done ? "Aim point is set where you dropped it." : aimNote);
+    },
     onRegion(x0, y0, x1, y1, done) {
       model.region = [x0, y0, x1, y1];
-      if (done) setMode("region");
-      else refresh();
+      if (!done) {
+        refresh();
+        return;
+      }
+      if (model.shots.some((s) => !inRegionOrUserPlaced(s))) {
+        remember();
+        model.shots = model.shots.filter(inRegionOrUserPlaced);
+        model.selected = null;
+      }
+      setMode("region");
     },
   });
 }
@@ -653,29 +676,16 @@ els.expected.addEventListener("change", () => {
   refresh();
 });
 els.detect.addEventListener("click", () => guarded(() => detect(), "detect"));
-els.fill.addEventListener("click", () => guarded(fillShortfall, "fill"));
-els.save.addEventListener("click", () =>
-  guarded(async () => {
-    await save();
-    flash("Saved.", true);
-  }, "save"),
-);
-els.aim.addEventListener("click", () => setMode("aim"));
-if (hasFrame) els.svg.addEventListener("pointerdown", selectRingAt, true);
-els.useAim.addEventListener("click", useSuggestedAim);
-els.nextAim.addEventListener("click", nextSuggestedAim);
-els.manualAim.addEventListener("click", placeAimYourself);
-els.region.addEventListener("click", () => setMode("region"));
+els.confirmAim.addEventListener("click", confirmAim);
+els.shotsBack.addEventListener("click", backToAim);
+els.aimCenterToggle.addEventListener("click", () => setAimMode("center"));
+els.aimHandToggle.addEventListener("click", () => setAimMode("hand"));
 els.remove.addEventListener("click", removeSelected);
 els.undo.addEventListener("click", undo);
 els.zoomIn.addEventListener("click", () => editor && editor.zoomBy(BUTTON_ZOOM_STEP));
 els.zoomOut.addEventListener("click", () => editor && editor.zoomBy(1 / BUTTON_ZOOM_STEP));
 els.zoomFit.addEventListener("click", () => editor && editor.fit());
-els.zoomRegion.addEventListener(
-  "click",
-  () => editor && model.region && editor.zoomToRegion(model.region, { animate: true }),
-);
-els.finalize.addEventListener("click", askFinalize);
+els.finalize.addEventListener("click", done);
 els.finalizeConfirm.addEventListener("click", finalizeGroup);
 els.finalizeCancel.addEventListener("click", cancelFinalize);
 els.finalizeBox.addEventListener("keydown", (event) => {
@@ -684,10 +694,11 @@ els.finalizeBox.addEventListener("keydown", (event) => {
 document.addEventListener("keydown", (event) => {
   const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
   if (typing || !editor) return;
-  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+  const onShots = model.step === "shots";
+  if (onShots && (event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undo();
-  } else if (event.key === "Delete" || event.key === "Backspace") {
+  } else if (onShots && (event.key === "Delete" || event.key === "Backspace")) {
     event.preventDefault();
     removeSelected();
   } else if (event.key === "+" || event.key === "=") {
@@ -702,11 +713,7 @@ document.addEventListener("keydown", (event) => {
 setUpReferenceChange();
 explain();
 if (editor && model.region) editor.zoomToRegion(model.region);
-els.hint.textContent = hasFrame && !isFinal
-  ? EDIT_HINT
-  : "";
-refresh();
-if (hasFrame && !isFinal && model.shots.length === 0 && model.rejections.length === 0) {
-  // The first detect on opening is the starting point, so Undo does not take it back.
-  guarded(() => detect(true), "detect");
+showStep(model.step);
+if (hasFrame && !isFinal) {
+  if (model.step === "shots") openShots();
 }

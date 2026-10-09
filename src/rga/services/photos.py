@@ -45,6 +45,8 @@ MIN_REFERENCE_PX = 64
 ORIENTED_JPEG_QUALITY = 92
 ORIENTED_VARIANT = "oriented"
 WORKING_VARIANT = "working"
+THUMB_VARIANT = "thumb"
+THUMB_MAX_SIDE_PX = 240
 
 
 class PhotoError(Exception):
@@ -191,6 +193,36 @@ def oriented_path(settings: Settings, photo_id: int) -> Path:
     return settings.working_dir / f"{photo_id}_oriented.jpg"
 
 
+def thumb_path(settings: Settings, photo_id: int) -> Path:
+    """Path of the photo's small oriented preview (longest side `THUMB_MAX_SIDE_PX`)."""
+    return settings.working_dir / f"{photo_id}_thumb.jpg"
+
+
+def preferred_reference_kind(conn: sqlite3.Connection) -> str | None:
+    """The scale reference kind past groups used most (ties go to the earlier kind in the list),
+    offered as the reference page's default; None before any group has a confirmed reference."""
+    counts = repo_groups.reference_kind_counts(conn)
+    if not counts:
+        return None
+    order = [kind.value for kind in ReferenceKind]
+    return max(
+        counts, key=lambda kind: (counts[kind], -order.index(kind) if kind in order else -99)
+    )
+
+
+def remove_photo_files(settings: Settings, photos: Sequence[PhotoRow]) -> None:
+    """Remove the stored original and every derived image of deleted photos (missing files are
+    fine). Only paths derived from the photo rows are touched."""
+    for photo in photos:
+        for path in (
+            original_path(settings, photo),
+            working_path(settings, photo.id),
+            oriented_path(settings, photo.id),
+            thumb_path(settings, photo.id),
+        ):
+            path.unlink(missing_ok=True)
+
+
 def _atomic_write(path: Path, data: bytes) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
     try:
@@ -330,9 +362,33 @@ def _photo_has_measurements(conn: sqlite3.Connection, photo_id: int) -> bool:
     return row is not None
 
 
-def reference_locked(conn: sqlite3.Connection, photo_id: int) -> bool:
-    """True while a group on the photo has shots or an aim, which fixes its reference."""
-    return _photo_has_measurements(conn, photo_id)
+def reference_locked(
+    conn: sqlite3.Connection, photo_id: int, except_group: int | None = None
+) -> bool:
+    """True while a group on the photo has shots or an aim, which fixes its reference.
+
+    With `except_group` only the other groups count, plus any finalized one: a group going back to
+    its own reference step may change the scale (its own aim and shots are cleared first), but not
+    one another group measured against."""
+    if except_group is None:
+        return _photo_has_measurements(conn, photo_id)
+    row = conn.execute(
+        "SELECT 1 FROM groups g WHERE g.photo_id = ? AND g.id <> ? AND (g.status = 'final' "
+        "OR g.aim_x_in IS NOT NULL OR EXISTS (SELECT 1 FROM shots s WHERE s.group_id = g.id)) "
+        "LIMIT 1",
+        (photo_id, except_group),
+    ).fetchone()
+    return row is not None
+
+
+def group_has_work(conn: sqlite3.Connection, group_id: int) -> bool:
+    """True when the group has saved shots or an aim (taken against its photo's current scale)."""
+    row = conn.execute(
+        "SELECT 1 FROM groups g WHERE g.id = ? AND (g.aim_x_in IS NOT NULL "
+        "OR EXISTS (SELECT 1 FROM shots s WHERE s.group_id = g.id))",
+        (group_id,),
+    ).fetchone()
+    return row is not None
 
 
 _DRAFTS_WITH_WORK = (
@@ -481,7 +537,7 @@ def confirm_reference(
 
 
 def image_file(conn: sqlite3.Connection, settings: Settings, photo_id: int, variant: str) -> Path:
-    """Path of the photo's `oriented` or `working` image, rebuilt from the original if missing.
+    """Path of the photo's `oriented`, `working` or `thumb` image, rebuilt from the original if missing.
 
     The working image exists only for a confirmed reference (`ReferenceUnconfirmed` otherwise).
     The path is derived from the photo row; no client value ever reaches the filesystem.
@@ -495,6 +551,18 @@ def image_file(conn: sqlite3.Connection, settings: Settings, photo_id: int, vari
             img = _load_original(settings, photo)
             working, _, _ = build_working(img, np.array(json.loads(photo.h_px_to_plane_json)))
             _atomic_write(path, _encode(".png", working))
+        return path
+    if variant == THUMB_VARIANT:
+        path = thumb_path(settings, photo_id)
+        if not path.is_file():
+            img = _load_original(settings, photo)
+            scale = THUMB_MAX_SIDE_PX / max(img.shape[:2])
+            if scale < 1:
+                size = (max(1, round(img.shape[1] * scale)), max(1, round(img.shape[0] * scale)))
+                img = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+            _atomic_write(
+                path, _encode(".jpg", img, (cv2.IMWRITE_JPEG_QUALITY, ORIENTED_JPEG_QUALITY))
+            )
         return path
     path = oriented_path(settings, photo_id)
     if not path.is_file():
@@ -523,6 +591,10 @@ __all__ = [
     "get_photo",
     "image_file",
     "oriented_path",
+    "group_has_work",
+    "preferred_reference_kind",
+    "remove_photo_files",
+    "thumb_path",
     "original_path",
     "page_photo",
     "propose",

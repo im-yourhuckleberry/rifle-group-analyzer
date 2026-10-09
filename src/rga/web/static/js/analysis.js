@@ -197,7 +197,6 @@ function showAggregate(result, ids, labelFor) {
   );
   const badges = document.getElementById("aggregate-badges");
   badges.replaceChildren();
-  if (result.includes_estimated) badges.appendChild(element("span", "includes estimated shots", "badge warn"));
   const warnings = document.getElementById("aggregate-warnings");
   warnings.replaceChildren(...result.warnings.map((text) => element("p", text, "notice")));
   document.getElementById("aggregate-note").textContent =
@@ -277,6 +276,19 @@ function wirePicker(root) {
     button.disabled = selectedIds().length === 0;
   };
 
+  // A row's photo loads the first time it is hovered, focused or selected; a selected row keeps
+  // showing it (app.css).
+  const reveal = (event) => {
+    const row = event.target.closest("tr");
+    const thumb = row && row.querySelector("img.row-thumb[data-thumb]");
+    if (!thumb) return;
+    thumb.src = thumb.dataset.thumb;
+    delete thumb.dataset.thumb;
+  };
+  body.addEventListener("mouseover", reveal);
+  body.addEventListener("focusin", reveal);
+  body.addEventListener("change", reveal);
+
   function render() {
     body.replaceChildren();
     const distance = distanceFilter.value;
@@ -305,6 +317,16 @@ function wirePicker(root) {
       purpose.appendChild(link);
       if (group.masked) purpose.appendChild(element("span", " (cannot be combined)", "muted"));
       row.appendChild(purpose);
+      // The group's photo shows at the row's right end on hover and while the row is selected.
+      const thumbCell = element("td", null, "thumb-cell");
+      if (group.photo_id !== null) {
+        const thumb = document.createElement("img");
+        thumb.className = "row-thumb";
+        thumb.alt = "";
+        thumb.dataset.thumb = `/api/photos/${group.photo_id}/image?variant=thumb`;
+        thumbCell.appendChild(thumb);
+      }
+      row.appendChild(thumbCell);
       body.appendChild(row);
     });
     empty.hidden = shown !== 0;

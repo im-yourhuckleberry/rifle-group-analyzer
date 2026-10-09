@@ -28,6 +28,8 @@ from rga.vision.transform import similarity_from_circle
 CIRCLE_KINDS: tuple[ReferenceKind, ...] = (
     ReferenceKind.CIRCLE_1IN,
     ReferenceKind.CIRCLE_1_5IN,
+    ReferenceKind.CIRCLE_2IN,
+    ReferenceKind.CIRCLE_2_5IN,
     ReferenceKind.CIRCLE_3IN,
 )
 TILT_AXIS_RATIO = 0.98
@@ -36,6 +38,8 @@ TILT_AXIS_RATIO = 0.98
 _SIZE_FRACTION: dict[ReferenceKind, tuple[float, float]] = {
     ReferenceKind.CIRCLE_1IN: (0.045, 0.40),
     ReferenceKind.CIRCLE_1_5IN: (0.060, 0.50),
+    ReferenceKind.CIRCLE_2IN: (0.075, 0.65),
+    ReferenceKind.CIRCLE_2_5IN: (0.090, 0.80),
     ReferenceKind.CIRCLE_3IN: (0.100, 0.95),
 }
 _DETECT_MAX_SIDE = 1280
@@ -53,6 +57,28 @@ _SNAP_WINDOW_FACTORS = (2.0, 4.0)
 _SNAP_MAX_AREA_FRACTION = 0.5
 _SNAP_CONVEX_SOLIDITY = 0.7
 _MIN_ROUND_EDGE_POINTS = 40
+_HULL_MIN_FILL = 0.85
+_HULL_MIN_FILL_TORN = 0.5
+_HULL_MIN_TRACED = 0.7
+_HULL_TRACE_PX = 2.0
+_HULL_MAX_GAPS = 4
+_TORN_MIN_COVERAGE = 0.45
+_TORN_MIN_INLIERS = 0.45
+_TORN_TRIALS = 400
+_TORN_TOL_PX = 1.5
+_TORN_MAX_POINTS = 6000
+_TORN_BINS = 180
+# Orange / fluorescent red-orange stickers are nearly always the reference, so they get a search
+# that accepts a far more broken rim (its pieces must still sit on one circle) and rank first.
+_ORANGE_HUE_MAX = 20  # OpenCV hue 0..180; red-orange also wraps to >= _ORANGE_HUE_WRAP
+_ORANGE_HUE_WRAP = 168
+_ORANGE_MIN_SAT = 110
+_ORANGE_MIN_VAL = 90
+_ORANGE_MIN_COVERAGE = 0.3
+_ORANGE_MAX_GAPS = 12
+_ORANGE_MIN_INLIERS = 0.3
+_ORANGE_TRIALS = 3000
+_ORANGE_RIM = 0.3  # fraction of points just inside the edge that must be orange to rank first
 _NESTED_MIN_RATIO = 1.3
 _GRID_SIZE_TOLERANCE = 0.15
 
@@ -257,8 +283,8 @@ def reference_from_circle(c: CircleCandidate, kind: ReferenceKind, method: str) 
     warnings = ()
     if ratio < TILT_AXIS_RATIO:
         warnings = (
-            f"Camera tilt detected (circle axis ratio {ratio:.2f}): scale is approximate. "
-            "Re-shoot straight on, or use a grid reference.",
+            "The photo looks tilted (taken at an angle), so sizes from it may be slightly off. "
+            "For the best result, take the photo straight on, or use a grid target.",
         )
     return ReferenceResult(
         kind=kind,
@@ -354,10 +380,153 @@ def _coarse_from_mask(mask: np.ndarray, d_min: float, d_max: float) -> Iterator[
             hull = cv2.convexHull(contour)[:, 0, :].astype(np.float64) + [x - 1, y - 1]
             hull = _densify(hull)
             coarse = _validate_coarse(hull)
-            if coarse is not None and not _hull_is_filled(contour, hull):
+            if coarse is not None and not _hull_is_filled(contour[:, 0, :] + [x - 1, y - 1], hull):
                 coarse = None
         if coarse is not None:
             yield coarse
+
+
+def _torn_coarse(
+    mask: np.ndarray,
+    d_min: float,
+    d_max: float,
+    seed: int,
+    min_coverage: float = _TORN_MIN_COVERAGE,
+    max_gaps: int = _HULL_MAX_GAPS,
+    trials: int = _TORN_TRIALS,
+) -> _Coarse | None:
+    """The circle that the outer edges of several colored pieces share (a sticker torn apart).
+
+    Shots through a sticker can cut it into pieces, none of them round. Triples of points from one
+    piece's outline propose circles (RANSAC); a proposal counts edge points within `_TORN_TOL_PX`
+    of it whose inside is colored and outside is not, across all pieces, and is kept when those
+    points cover at least `min_coverage` of its circumference with at most `max_gaps` breaks, and it lies wholly inside the image. Returns the best, least-squares fitted to its edge
+    points, or None.
+    """
+    height, width = mask.shape
+    mask_u8 = cv2.morphologyEx(
+        mask.astype(np.uint8), cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    )
+    contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    min_len = 0.15 * math.pi * d_min
+    pieces = [c[:, 0, :] for c in contours if len(c) >= max(20, min_len)]
+    if not pieces:
+        return None
+    pts = np.vstack(pieces).astype(np.float64)
+    keep = (pts[:, 0] > 0) & (pts[:, 1] > 0) & (pts[:, 0] < width - 1) & (pts[:, 1] < height - 1)
+    pts = pts[keep][:: max(1, int(keep.sum()) // _TORN_MAX_POINTS)]
+    if len(pts) < 60:
+        return None
+    rng = np.random.default_rng(seed)
+    lengths = np.array([len(p) for p in pieces], dtype=np.float64)
+    weights = lengths / lengths.sum()
+    triples = []
+    for trial in range(trials):
+        if trial % 2 == 0 or len(pieces) < 3:  # three points along one piece's outline
+            piece = pieces[int(rng.choice(len(pieces), p=weights))]
+            n = len(piece)
+            start = int(rng.integers(n))
+            step = int(rng.integers(max(1, n // 12), max(2, n // 3)))
+            triples.append(piece[[start, (start + step) % n, (start + 2 * step) % n]])
+        else:  # one point from each of three pieces: the arc that broken pieces share
+            chosen = rng.choice(len(pieces), 3, replace=False, p=weights)
+            triples.append(np.array([pieces[k][int(rng.integers(len(pieces[k])))] for k in chosen]))
+    tri = np.asarray(triples, dtype=np.float64)
+    (ax, ay), (bx, by), (cx, cy) = tri[:, 0].T, tri[:, 1].T, tri[:, 2].T
+    den = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    ok = np.abs(den) > 1e-6
+    den = np.where(ok, den, 1.0)
+    ux = ((ax**2 + ay**2) * (by - cy) + (bx**2 + by**2) * (cy - ay) + (cx**2 + cy**2) * (ay - by)) / den
+    uy = ((ax**2 + ay**2) * (cx - bx) + (bx**2 + by**2) * (ax - cx) + (cx**2 + cy**2) * (bx - ax)) / den
+    r = np.hypot(ax - ux, ay - uy)
+    ok &= (r >= d_min / 2) & (r <= d_max / 2)
+    if not ok.any():
+        return None
+    ux, uy, r = ux[ok], uy[ok], r[ok]
+    dist = np.hypot(pts[None, :, 0] - ux[:, None], pts[None, :, 1] - uy[:, None])
+    # rank proposals by the edge points that sit on them with color inside and none outside, so the
+    # inner edges of a ring of pieces (color outside) cannot crowd out the sticker's outer edge
+    hyp, idx = np.nonzero(np.abs(dist - r[:, None]) <= _TORN_TOL_PX)
+    radial = (pts[idx] - np.column_stack([ux[hyp], uy[hyp]])) / np.maximum(dist[hyp, idx], 1e-9)[
+        :, None
+    ]
+    inner = np.rint(pts[idx] - 3 * radial).astype(int)
+    outer = np.rint(pts[idx] + 3 * radial).astype(int)
+    np.clip(inner[:, 0], 0, width - 1, out=inner[:, 0])
+    np.clip(inner[:, 1], 0, height - 1, out=inner[:, 1])
+    np.clip(outer[:, 0], 0, width - 1, out=outer[:, 0])
+    np.clip(outer[:, 1], 0, height - 1, out=outer[:, 1])
+    good = (mask_u8[inner[:, 1], inner[:, 0]] > 0) & (mask_u8[outer[:, 1], outer[:, 0]] == 0)
+    counts = np.bincount(hyp[good], minlength=len(r)) / (2 * math.pi * r)
+    best: _Coarse | None = None
+    for i in np.argsort(-counts)[:8]:
+        on = np.abs(dist[i] - r[i]) <= _TORN_TOL_PX
+        edge = pts[on]
+        u = (edge - [ux[i], uy[i]]) / np.maximum(dist[i][on], 1e-9)[:, None]
+        inner = np.rint(edge - 3 * u).astype(int)
+        outer = np.rint(edge + 3 * u).astype(int)
+        valid = (
+            (inner[:, 0] >= 0) & (inner[:, 1] >= 0) & (inner[:, 0] < width) & (inner[:, 1] < height)
+            & (outer[:, 0] >= 0) & (outer[:, 1] >= 0) & (outer[:, 0] < width) & (outer[:, 1] < height)
+        )
+        side = np.zeros(len(edge), bool)
+        side[valid] = (mask_u8[inner[valid, 1], inner[valid, 0]] > 0) & (
+            mask_u8[outer[valid, 1], outer[valid, 0]] == 0
+        )
+        if not (r[i] < ux[i] < width - 1 - r[i] and r[i] < uy[i] < height - 1 - r[i]):
+            continue  # cut off by the image edge, like a mark touching the border
+        angles = np.arctan2(u[side, 1], u[side, 0])
+        hit = np.zeros(_TORN_BINS, bool)
+        hit[((angles + math.pi) / (2 * math.pi) * _TORN_BINS).astype(int) % _TORN_BINS] = True
+        coverage = float(hit.mean())
+        gaps = _gap_count(hit, min_len=2)  # a rim slotted all round is not a sticker
+        if coverage < min_coverage or gaps > max_gaps:
+            continue
+        if best is not None and coverage <= best.quality:
+            continue
+        try:
+            fit = _circle_least_squares(edge[side])
+        except ValueError:
+            continue
+        best = _Coarse(fit, coverage)
+    return best
+
+
+def _orange_mask(bgr: np.ndarray) -> np.ndarray:
+    """Saturated orange to red-orange pixels (fluorescent target stickers), as a bool mask."""
+    hsv = cv2.cvtColor(cv2.GaussianBlur(bgr, (0, 0), 1.0), cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    return ((hue <= _ORANGE_HUE_MAX) | (hue >= _ORANGE_HUE_WRAP)) & (sat >= _ORANGE_MIN_SAT) & (
+        val >= _ORANGE_MIN_VAL
+    )
+
+
+def _orange_rim(orange: np.ndarray, e: _Ellipse) -> float:
+    """Fraction of 180 points at 0.92 of the radius (just inside the edge) that are orange."""
+    t = np.linspace(0, 2 * math.pi, 180, endpoint=False)
+    shrunk = _Ellipse(e.cx, e.cy, 0.92 * e.a, 0.92 * e.b, e.theta)
+    pts, _ = shrunk.points(t)
+    xy = np.rint(pts).astype(int)
+    h, w = orange.shape
+    inside = (xy[:, 0] >= 0) & (xy[:, 1] >= 0) & (xy[:, 0] < w) & (xy[:, 1] < h)
+    if not inside.any():
+        return 0.0
+    return float(orange[xy[inside, 1], xy[inside, 0]].sum()) / len(t)
+
+
+def _gap_count(hit: np.ndarray, min_len: int) -> int:
+    """Runs of at least `min_len` consecutive False bins in the circular array `hit`."""
+    if hit.all() or not hit.any():
+        return 0 if hit.all() else 1
+    rolled = np.roll(hit, -int(np.argmax(hit)))  # start on a hit so no run wraps around
+    runs, length = 0, 0
+    for h in rolled:
+        if h:
+            runs += length >= min_len
+            length = 0
+        else:
+            length += 1
+    return runs + (length >= min_len)
 
 
 def _densify(poly: np.ndarray, step: float = 1.0) -> np.ndarray:
@@ -371,7 +540,27 @@ def _densify(poly: np.ndarray, step: float = 1.0) -> np.ndarray:
 
 
 def _hull_is_filled(contour: np.ndarray, hull: np.ndarray) -> bool:
-    return cv2.contourArea(contour) >= 0.85 * cv2.contourArea(hull.astype(np.float32))
+    """The shape fills its round hull, or (a sticker shot away at its edge) traces most of it.
+
+    A group that tears through a sticker's edge leaves a deep notch, so the colored area can fill
+    as little as half its hull; it still counts when its own edge runs along the hull for at least
+    `_HULL_MIN_TRACED` of the hull's length, broken in at most `_HULL_MAX_GAPS` places (a disc
+    slotted all round is not a reference). `_refine` then fits only the intact edge.
+    """
+    fill = cv2.contourArea(contour) / max(1e-9, cv2.contourArea(hull.astype(np.float32)))
+    if fill >= _HULL_MIN_FILL:
+        return True
+    if fill < _HULL_MIN_FILL_TORN:
+        return False
+    outline = contour.reshape(-1, 1, 2).astype(np.float32)
+    traced = np.array(
+        [
+            abs(cv2.pointPolygonTest(outline, (float(x), float(y)), True)) <= _HULL_TRACE_PX
+            for x, y in hull
+        ]
+    )
+    gaps = int((~traced & np.roll(traced, 1)).sum())  # a slotted or star-like rim has many
+    return float(traced.mean()) >= _HULL_MIN_TRACED and gaps <= _HULL_MAX_GAPS
 
 
 def _validate_coarse(contour: np.ndarray) -> _Coarse | None:
@@ -422,7 +611,9 @@ class _Refined:
     score: float
 
 
-def _refine(img: np.ndarray, coarse: _Ellipse, slack_px: float) -> _Refined | None:
+def _refine(
+    img: np.ndarray, coarse: _Ellipse, slack_px: float, min_inliers: float = _MIN_INLIER_FRACTION
+) -> _Refined | None:
     """Fit the ellipse to sub-pixel edge crossings sampled along rays.
 
     Returns None when too few rays see an edge, too few survive outlier rejection, the fit is not
@@ -454,7 +645,7 @@ def _refine(img: np.ndarray, coarse: _Ellipse, slack_px: float) -> _Refined | No
                 cv2.INTER_LINEAR,
                 borderMode=cv2.BORDER_REPLICATE,
             )
-            refined = _fit_rays(profiles, offsets, base, normals, radius, (x0, y0))
+            refined = _fit_rays(profiles, offsets, base, normals, radius, (x0, y0), min_inliers)
             if refined is not None and (best is None or refined.score > best.score):
                 best = refined
         if best is not None and best.score >= _GOOD_SCORE:
@@ -469,6 +660,7 @@ def _fit_rays(
     normals: np.ndarray,
     radius: float,
     origin: tuple[int, int],
+    min_inliers: float = _MIN_INLIER_FRACTION,
 ) -> _Refined | None:
     k = profiles.shape[1]
     edge = max(2, k * 3 // 10)
@@ -484,13 +676,13 @@ def _fit_rays(
     )
     t_edge = offsets[peak + 1] + np.clip(shift, -1, 1) * _RAY_STEP_PX
     valid = (sign * contrast >= _MIN_EDGE_CONTRAST) & (mid > 0)
-    if valid.sum() < _MIN_INLIER_FRACTION * len(profiles):
+    if valid.sum() < min_inliers * len(profiles):
         return None
     points = base + t_edge[:, None] * normals + np.array(origin, dtype=np.float64)
     keep = valid.copy()
     ellipse: _Ellipse | None = None
     for _ in range(4):
-        if keep.sum() < _MIN_INLIER_FRACTION * len(profiles):
+        if keep.sum() < min_inliers * len(profiles):
             return None
         try:
             ellipse = _ellipse_direct_fit(points[keep])
@@ -564,12 +756,36 @@ def find_circle_candidates(
     d_min, d_max = max(_MIN_DETECT_DIAMETER_PX, low * short), high * short
 
     found: list[_Coarse] = []
-    for mask in _masks(small):
+    torn: list[_Coarse] = []
+    for index, mask in enumerate(_masks(small)):
         found.extend(_coarse_from_mask(mask, d_min, d_max))
+        piece_circle = _torn_coarse(mask, d_min, d_max, seed=index)
+        if piece_circle is not None:
+            torn.append(piece_circle)
+    orange = _orange_mask(small)
+    orange_torn = _torn_coarse(
+        orange,
+        d_min,
+        d_max,
+        seed=99,
+        min_coverage=_ORANGE_MIN_COVERAGE,
+        max_gaps=_ORANGE_MAX_GAPS,
+        trials=_ORANGE_TRIALS,
+    )
     coarse = _dedupe_coarse(found)[:_MAX_REFINE_CANDIDATES]
+    torn = [
+        t
+        for t in _dedupe_coarse(torn)
+        if not any(_same_circle(t.ellipse, c.ellipse) for c in coarse)
+    ][:4]
+    jobs = [(c, _MIN_INLIER_FRACTION) for c in coarse] + [(t, _TORN_MIN_INLIERS) for t in torn]
+    if orange_torn is not None and not any(
+        _same_circle(orange_torn.ellipse, c.ellipse) for c, _ in jobs
+    ):
+        jobs.append((orange_torn, _ORANGE_MIN_INLIERS))
 
     refined: list[_Refined] = []
-    for item in coarse:
+    for item, min_inliers in jobs:
         e = item.ellipse
         full = _Ellipse(
             (e.cx + 0.5) / scale - 0.5,
@@ -578,10 +794,14 @@ def find_circle_candidates(
             e.b / scale,
             e.theta,
         )
-        result = _refine(img, full, slack_px=2.5 / scale)
+        result = _refine(img, full, slack_px=2.5 / scale, min_inliers=min_inliers)
+        if result is None and item is orange_torn:
+            # too broken for the edge rays: keep the fit to the orange pieces' shared arc
+            result = _Refined(full, 0.5 * orange_torn.quality)
         if result is not None:
             refined.append(result)
     ranked = _outer_first(sorted(refined, key=lambda r: -r.score))
+    ranked = _orange_first(ranked, orange, scale)
     if grid is not None:
         ranked = _grid_matches_first(ranked, grid, kind)
     return [r.ellipse.to_candidate(r.score) for r in ranked[:max_candidates]]
@@ -609,6 +829,26 @@ def _outer_first(ranked: list[_Refined]) -> list[_Refined]:
         for r in ranked
     }
     return sorted(ranked, key=lambda r: (-chain_score[id(r)], -r.ellipse.mean_diameter))
+
+
+def _orange_first(ranked: list[_Refined], orange: np.ndarray, scale: float) -> list[_Refined]:
+    """Stable partition: circles that are orange just inside their edge (a sticker) come first.
+
+    `orange` is the mask at detection scale `scale`; a bullet hole or printed mark inside an orange
+    sticker is grey or black just inside its own edge, so it falls behind the sticker.
+    """
+
+    def is_orange(r: _Refined) -> bool:
+        e = r.ellipse
+        small = _Ellipse(
+            (e.cx + 0.5) * scale - 0.5, (e.cy + 0.5) * scale - 0.5, e.a * scale, e.b * scale, e.theta
+        )
+        return _orange_rim(orange, small) >= _ORANGE_RIM
+
+    flags = [is_orange(r) for r in ranked]
+    return [r for r, f in zip(ranked, flags, strict=True) if f] + [
+        r for r, f in zip(ranked, flags, strict=True) if not f
+    ]
 
 
 def _diameter_in(h: np.ndarray, e: _Ellipse) -> float | None:

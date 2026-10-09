@@ -1,0 +1,41 @@
+{# "Add new group": the button and its dialog (choose a rifle, choose the photo). Continue uploads
+   the photo and opens the New group page (`/groups/new`) with the photo attached; see new_group.js.
+   `rifles` are RifleSummary rows; a rifle without a load cannot take a group yet. #}
+{% macro new_group_button(extra_class="") %}
+<button type="button" class="new-group-button{% if extra_class %} {{ extra_class }}{% endif %}" data-new-group-open aria-haspopup="dialog" aria-controls="new-group-dialog">Add new group</button>
+{% endmacro %}
+
+{% macro new_group_dialog(rifles) %}
+{% set usable = rifles|selectattr("load_count")|list %}
+<dialog id="new-group-dialog" class="new-group-dialog" aria-labelledby="new-group-title">
+  <form id="new-group-form" class="stack" novalidate>
+    <h2 id="new-group-title">Add new group</h2>
+    {% if usable %}
+    <div class="field">
+      <label for="ng-rifle">Rifle</label>
+      <select id="ng-rifle" name="rifle_id">
+        {% for s in rifles %}
+        <option value="{{ s.rifle.id }}"{% if not s.load_count %} disabled{% elif s.rifle.id == usable[0].rifle.id %} selected{% endif %}>{{ s.rifle.name }} ({{ s.rifle.cartridge }}){% if not s.load_count %}, no loads yet{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% if usable|length < rifles|length %}<span class="hint">A rifle needs a load before it can take a group; add one on its page under <a href="/rifles">Rifles</a>.</span>{% endif %}
+    </div>
+    <div class="field">
+      <label for="ng-photo">Target photo</label>
+      <input id="ng-photo" name="photo" type="file" accept="image/*">
+      <span class="hint">The date and time the photo was taken fill in the group.</span>
+    </div>
+    <p class="notice danger" id="ng-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="submit" id="ng-continue">Continue</button>
+      <button type="button" class="secondary" data-new-group-close>Cancel</button>
+    </div>
+    {% else %}
+    <p class="notice info" id="ng-no-rifle">A group needs a rifle with a load. <a href="/rifles">Add a rifle and a load</a> first.</p>
+    <div class="actions">
+      <button type="button" class="secondary" data-new-group-close>Close</button>
+    </div>
+    {% endif %}
+  </form>
+</dialog>
+{% endmacro %}

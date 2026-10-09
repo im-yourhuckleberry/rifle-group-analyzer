@@ -17,7 +17,7 @@ WEB_DIR = Path(__file__).resolve().parents[2] / "src" / "rga" / "web"
 TEMPLATES = WEB_DIR / "templates"
 STATIC = WEB_DIR / "static"
 
-NAV_HREFS = ["/", "/rifles", "/groups", "/analysis", "/compare", "/dope", "/settings"]
+NAV_HREFS = ["/groups", "/rifles", "/analysis", "/compare", "/dope", "/settings"]
 
 
 def _env() -> Environment:

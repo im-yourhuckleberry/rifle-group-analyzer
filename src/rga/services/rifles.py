@@ -1,4 +1,4 @@
-"""Rifle, load and lot service: validation on top of `repo_rifles`, plus the dashboard summary.
+"""Rifle, load and lot service: validation on top of `repo_rifles`, plus rifle summaries.
 
 Public functions that write commit; errors are `RifleError` subclasses carrying a stable
 snake_case `code` (`*_not_found` maps to 404, `invalid_*` to 422, anything else to 409).
@@ -13,14 +13,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from rga.db import repo_groups, repo_rifles
-from rga.db.rows import GroupRow, LoadRow, LotRow, RifleRow, SuppressorRow
+from rga.db.rows import LoadRow, LotRow, RifleRow, SuppressorRow
 from rga.domain.calibers import CALIBERS, diameter_for
 from rga.domain.calibers import DIAMETER_CHOICES as DIAMETER_CHOICES  # the rifle forms' list
 from rga.services.group_records import DayGroups, rifle_group_days
 
 FACTORY_FIELDS = ("maker", "product", "bullet_weight_gr", "bullet_type")
 HANDLOAD_FIELDS = ("bullet_weight_gr", "bullet", "primer", "brass", "coal_in")
-RECENT_GROUPS = 10
 
 
 class RifleError(Exception):
@@ -227,7 +226,7 @@ def get_or_create_lot(conn: sqlite3.Connection, load_id: int, lot_code: str) -> 
 
 @dataclass(frozen=True)
 class RifleSummary:
-    """A rifle with its load count and zero-load label for lists and the dashboard."""
+    """A rifle with its load count and zero-load label for lists and the "Add new group" dialog."""
 
     rifle: RifleRow
     load_count: int
@@ -254,25 +253,6 @@ class RiflePage:
     suppressors: list[SuppressorRow]
 
 
-@dataclass(frozen=True)
-class RecentGroup:
-    """A recent group with its rifle's name, its load label and lot code, and its shot count."""
-
-    group: GroupRow
-    rifle_name: str
-    load_label: str
-    lot_code: str
-    shot_count: int
-
-
-@dataclass(frozen=True)
-class Dashboard:
-    """What the home page shows: every rifle and the most recent groups."""
-
-    rifles: list[RifleSummary]
-    recent_groups: list[RecentGroup]
-
-
 def rifle_page_data(conn: sqlite3.Connection, rifle_id: int) -> RiflePage:
     """Rifle, loads with lots, groups by day and suppressors for the detail page; raises
     `RifleNotFound`.
@@ -294,35 +274,3 @@ def rifle_summaries(conn: sqlite3.Connection) -> list[RifleSummary]:
         zero = next((load.label for load in loads if load.id == rifle.zero_load_id), None)
         summaries.append(RifleSummary(rifle, len(loads), zero))
     return summaries
-
-
-def dashboard(conn: sqlite3.Connection) -> Dashboard:
-    """Rifles plus the `RECENT_GROUPS` latest groups by shot date, time and id; no statistics, so
-    nothing to mask.
-    """
-    summaries = rifle_summaries(conn)
-    names = {s.rifle.id: s.rifle.name for s in summaries}
-    loads = {
-        load.id: load
-        for summary in summaries
-        for load in repo_rifles.list_loads(conn, summary.rifle.id)
-    }
-    latest = sorted(
-        repo_groups.list_groups(conn),
-        key=lambda g: (g.shot_date, g.shot_time or "", g.id),
-        reverse=True,
-    )[:RECENT_GROUPS]
-    recent = []
-    for group in latest:
-        load = loads.get(group.load_id)
-        lot = repo_rifles.get_lot(conn, group.lot_id)
-        recent.append(
-            RecentGroup(
-                group,
-                names.get(load.rifle_id, "") if load else "",
-                load.label if load else "",
-                lot.lot_code if lot else "",
-                len(repo_groups.list_shots(conn, group.id)),
-            )
-        )
-    return Dashboard(summaries, recent)

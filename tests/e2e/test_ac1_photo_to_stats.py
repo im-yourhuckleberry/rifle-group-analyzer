@@ -75,13 +75,15 @@ def test_photo_to_stats_at_300_yd_with_the_weather_gate(app: App) -> None:
         ctx,
         "clean_circle1",
         weather={"temperature_f": 68, "density_altitude_ft": 1500, "wind_mph": 4, "wind_clock": 3},
+        aim=False,
     )
     _, _, _, shots = truth_stats(target)
-    assert app.review_counts() == (shots, shots), app.review_counter()
-    assert not app.review_finalize_enabled(), "finalize must wait for the aim point"
-    assert app.review_finalize_reason()
+    assert app.review_step() == "aim", "the shots wait for the aim point"
+    assert app.review_shots() == []
+    assert app.review_aim_mode() == "center", "a printed circle starts on its center, unsaved"
 
     app.review_mark_aim(truth_aim_px=target.truth["groups"][0]["aim_px"], photo_id=ref.photo_id)
+    assert app.review_counts() == (shots, shots), app.review_counter()
     assert app.review_finalize_enabled()
     app.review_finalize()
 

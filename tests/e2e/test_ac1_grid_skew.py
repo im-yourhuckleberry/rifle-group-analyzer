@@ -32,9 +32,8 @@ def test_skewed_grid_photo_gives_the_true_extreme_spread(app: App) -> None:
     app.confirm_reference("grid", candidate="truth", truth=truth)
     app.wait_path(r"/groups/\d+/review.*")
     app.review_wait_ready()
-    assert app.review_counts() == (len(indices), len(indices)), app.review_counter()
-
     app.review_mark_aim(truth_aim_px=truth["groups"][0]["aim_px"], photo_id=ref.photo_id)
+    assert app.review_counts() == (len(indices), len(indices)), app.review_counter()
     app.review_save()
     app.review_finalize()
 

@@ -1946,3 +1946,56 @@ SMOKE: PASSED
 - Fixed the pre-existing `test_ac10_guards.py::test_the_only_delete_control_is_not_a_bullet_hole`: it counts `button.danger:visible` (the hidden reference-change "Continue" was counted) → `pytest tests/e2e/test_ac10_guards.py -q` 4 passed.
 - `pytest tests/unit tests/integration tests/e2e -q` → 6075 passed, 1 failed (ac10, collected before its fix; passes after), 2 skipped, 1 xfailed (794 s). `ruff check tests src` → clean.
 - Visual check in Chromium against the running app (groups list, group page) in light and dark appearance.
+
+## 2026-10-08 — Review step flow, 2 in / 2.5 in circles, region-fenced detection, finalize → share
+
+- `.venv/bin/pytest tests/unit tests/integration tests/e2e -q -m "not accuracy"` → exit 0,
+  `6082 passed, 2 skipped, 5 deselected, 1 xfailed` (12:59).
+- T2 migration on a copy of the real `data/rga.sqlite3` (6 → 7): 11 photo rows identical before and
+  after, `foreign_key_check` empty, `integrity_check` ok, `circle_2_5in` accepted, `circle_4in` refused
+  by the CHECK.
+- Region regression (`TestDetect::test_every_proposed_shot_lies_inside_the_region`): fails with the
+  server filter disabled (estimated shots at x=831 outside a region from x0=837), passes with it.
+- Browser check on a copy of the real data (port 8766): aim step drew 0 shots; confirm → shots step;
+  region detect gave 10/10 shots, all inside the region rectangle; Go back/confirm kept them;
+  Finalize landed on `/groups/17` with the share card open; reference dropdown lists 1, 1.5, 2,
+  2.5 and 3 inch circles.
+
+## 2026-10-08 — Groups as home, Add new group, Edit/Delete, step UI simplification
+
+- `.venv/bin/pytest tests/unit tests/integration -q -m "not accuracy"` → exit 0, `6013 passed, 2 skipped, 5 deselected, 1 xfailed`.
+- `.venv/bin/pytest tests/e2e -q` → exit 0, `128 passed`.
+- Covered: `/` → `/groups` (303); New group page; reference step with a two-way toggle, one Next,
+  a single found outline preselected, the most-used kind preselected, never offering an old scale,
+  own-group work not locking it (cleared on Next); aim placed exactly (no snap), dragged, or put on
+  the circle's centre; Done (save, then Lock and finish); shot cap at the number fired; leave
+  confirmation; Groups Edit/Delete (photos no other group uses are removed with their files);
+  hover thumbnails on Groups and Analysis; region filter on proposals.
+- Real server restarted on the new code: migration 6 → 7 wrote `data/rga.sqlite3.pre-007`;
+  20 groups and 11 photos unchanged.
+
+## 2026-10-08 — Shared-photo detect fix ("not detecting holes anymore")
+
+Root cause: review.js `detect()` returned early (`mustDrawRegion`) when another group used the same photo (a re-uploaded photo dedups to the stored one), and the Set region button had been removed, so the shots step showed 0 shots. The server's `/detect` returned 10 shots for the same group (group 17 on a copy of the data). Fix: detect always runs; the block and its notice were removed.
+
+- `pytest tests/integration/test_pages_b66.py tests/integration/test_api_review.py tests/integration/test_api_client_contract.py -q` → exit 0, 276 passed
+- `pytest tests/e2e -q` → exit 0, 128 passed
+- Manual check on a data copy (:8767), group 17: shots step shows "10 of 10 shots" after confirming the aim
+- full unit+integration: `pytest tests --ignore=tests/e2e -q` → 6018 passed, 2 skipped, 1 xfailed, 1 warning in 542.94s (0:09:02)
+
+## 2026-10-08 — Cache build stamp, aggregate selected thumbnails, biggest-circle default, aim toggle, review layout
+
+- Add group created photo-less groups: the browser ran a group_form.js cached before static files were `no-cache`. Fix: pages set an `rga_build` cookie (hash of the static files) and send `Clear-Site-Data: "cache"` when the browser's cookie differs.
+- Aggregate picker: a selected row keeps its photo shown (`tr:has(input:checked)`); browser test fails without the rule.
+- Reference: with several outlines the biggest circle starts selected; zero outlines no longer crash (test fails without the guard); a stale hover after re-search no longer crashes redraw.
+- Aim step: "Use the circle's center" / "Mark it by hand" toggle replaces the button; a photo click switches to by hand.
+- Review panel: Exit in the page head; tools in one row; Go back left / main action right.
+- `pytest tests/e2e -q` → exit 0, 128 passed
+- `pytest tests --ignore=tests/e2e -q` → exit 0, 6024 passed, 2 skipped, 1 xfailed
+
+## 2026-10-08 — Desktop layouts fit the window (New group, reference, aim, shots)
+
+- New group page (≥1100×640): wide container, steps beside the title, fields four to a row, full-size photo on the right. Reference and review pages: photo sized to the window height beside a controls panel; detect messages and mouse help moved into the panel. The review editor's SVG gets a large natural size in the photo's shape so CSS scales it without letterboxing (no inline style in review.js). Shot clicks get 3 screen px of slack beyond the circle at any zoom.
+- Fit tests (1280×800, 1440×900, 1920×1080) fail with the layout disabled (4 of 5) and pass with it.
+- `pytest tests/e2e -q` → exit 0, 128 passed
+- `pytest tests --ignore=tests/e2e -q` → exit 0, 6029 passed, 2 skipped, 1 xfailed

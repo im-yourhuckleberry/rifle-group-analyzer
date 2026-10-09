@@ -19,6 +19,7 @@ from pydantic import BaseModel, StringConstraints, ValidationError, field_valida
 from rga.domain.types import GroupPurpose, GroupStatus, Position
 from rga.services import analysis as service
 from rga.services import group_records as context_service
+from rga.services import rifles as rifles_service
 from rga.web.app import ApiError
 from rga.web.deps import get_db
 from rga.web.schemas import PositiveId
@@ -131,6 +132,7 @@ def groups_page(request: Request, conn: Conn) -> HTMLResponse:
     try:
         listing = service.group_list(conn, query.filters(), query.page)
         options = service.group_filter_options(conn)
+        new_group_rifles = rifles_service.rifle_summaries(conn)
     except sqlite3.OperationalError as exc:
         if "locked" in str(exc).lower():
             raise ApiError(
@@ -144,6 +146,7 @@ def groups_page(request: Request, conn: Conn) -> HTMLResponse:
     context = {
         "active": "groups",
         "listing": listing,
+        "new_group_rifles": new_group_rifles,
         "options": options,
         "chosen": chosen,
         "filtered": bool(chosen),

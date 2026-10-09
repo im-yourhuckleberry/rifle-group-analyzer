@@ -94,15 +94,15 @@ def test_photo_flow_reference_review_finalize_and_read_stats(app: App) -> None:
     rifle_id = app.create_rifle()
     app.create_load(rifle_id)
     ctx = app.group_context(rifle_id)
-    ref, target = app.photo_group_to_review(ctx, "clean_circle1")
+    ref, target = app.photo_group_to_review(ctx, "clean_circle1", aim=False)
     expected_total = len(target.truth["groups"][0]["hole_indices"])
-    shots, expected = app.review_counts()
-    assert (shots, expected) == (expected_total, expected_total), app.review_counter()
-    assert "Aim point is set" not in app.review_aim_status()
+    assert app.review_aim_mode() == "center", "a printed circle starts on its center"
     aim = app.review_mark_aim(
         truth_aim_px=target.truth["groups"][0]["aim_px"], photo_id=ref.photo_id
     )
     assert "Aim" in aim
+    shots, expected = app.review_counts()
+    assert (shots, expected) == (expected_total, expected_total), app.review_counter()
     app.review_save()
     app.review_finalize()
     stats = app.read_stats()
@@ -153,16 +153,15 @@ def test_review_zoom_helpers_change_the_view_and_pointer_mapping_stays_exact(app
     assert app.review_view()["w"] == pytest.approx(fit["w"])
 
 
-def test_review_aim_suggestion_has_no_preselection_and_next_then_use_sets_it(app: App) -> None:
+def test_review_starts_on_the_circle_center_and_confirming_it_sets_the_aim(app: App) -> None:
     rifle_id = app.create_rifle()
     app.create_load(rifle_id)
     ctx = app.group_context(rifle_id)
-    app.photo_group_to_review(ctx, "clean_circle1")
-    if not app.review_aim_suggestion_visible():
-        pytest.skip("this scenario offers no aim suggestion")
-    assert "Aim point is set" not in app.review_aim_status()
-    app.review_use_suggested_aim()
-    assert "Aim point is set" in app.review_aim_status()
+    app.photo_group_to_review(ctx, "clean_circle1", aim=False)
+    assert app.review_aim_mode() == "center", "a printed-circle reference starts on its center"
+    assert app.review_aim_status() == "Aim point: the circle's exact center."
+    app.review_use_circle_center(confirm=True)
+    assert app.review_step() == "shots"
 
 
 def test_group_page_helpers_read_toggles_and_correction(app: App) -> None:

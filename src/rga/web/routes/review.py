@@ -232,6 +232,13 @@ def _reference_change(conn: sqlite3.Connection, view: review_service.GroupView) 
     return {"mode": mode, "draft_groups": work.draft_groups, "reason": reason}
 
 
+def _next_url(group_id: int, destination: str | None) -> str:
+    """Where finalizing goes: back into a guided zeroing flow, else the group's share card."""
+    if destination is not None and destination.startswith("/zeroing/"):
+        return destination
+    return f"/groups/{group_id}?share=1"
+
+
 @router.get("/groups/{group_id}/review", response_class=HTMLResponse)
 def review_page(
     request: Request,
@@ -250,6 +257,7 @@ def review_page(
         reference_change = _reference_change(conn, view)
     detail = detail_out(view)
     destination = safe_return_to(return_to)
+    center = review_service.reference_center_in(view)
     state = detail.model_dump(mode="json")
     state.update(
         {
@@ -257,19 +265,22 @@ def review_page(
             if view.photo
             else None,
             "reference_confirmed": view.frame is not None,
+            "reference_center": {"x_in": center[0], "y_in": center[1]} if center else None,
+            "reference_kind": view.photo.reference_kind if view.photo else None,
             "other_groups_on_photo": view.other_groups_on_photo,
             "reference_change": reference_change,
             "return_to": destination,
-            "next_url": destination or f"/groups/{group_id}",
+            "next_url": _next_url(group_id, destination),
         }
     )
     return request.app.state.templates.TemplateResponse(
         request,
         "review.html",
         {
-            "active": "home",
+            "active": "groups",
             "group_id": group_id,
             "return_to": destination,
             "state_json": json.dumps(state),
+            "is_final": view.group.status == "final",
         },
     )

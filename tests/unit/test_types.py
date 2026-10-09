@@ -16,7 +16,7 @@ def test_rejection_reason_has_exactly_one_member():
 @pytest.mark.parametrize(
     ("enum", "values"),
     [
-        (t.ReferenceKind, ["grid_1in", "circle_1in", "circle_1_5in", "circle_3in"]),
+        (t.ReferenceKind, ["grid_1in", "circle_1in", "circle_1_5in", "circle_2in", "circle_2_5in", "circle_3in"]),
         (t.ShotOrigin, ["detected", "split", "estimated", "manual"]),
         (t.BlobKind, ["single", "split", "ragged"]),
         (t.LoadKind, ["factory", "handload"]),
@@ -47,6 +47,8 @@ def test_reference_sizes_cover_every_kind():
     assert t.REFERENCE_SIZE_IN[t.ReferenceKind.GRID_1IN] == 1.0
     assert t.REFERENCE_SIZE_IN[t.ReferenceKind.CIRCLE_1IN] == 1.0
     assert t.REFERENCE_SIZE_IN[t.ReferenceKind.CIRCLE_1_5IN] == 1.5
+    assert t.REFERENCE_SIZE_IN[t.ReferenceKind.CIRCLE_2IN] == 2.0
+    assert t.REFERENCE_SIZE_IN[t.ReferenceKind.CIRCLE_2_5IN] == 2.5
     assert t.REFERENCE_SIZE_IN[t.ReferenceKind.CIRCLE_3IN] == 3.0
 
 

@@ -1560,6 +1560,7 @@ def test_the_module_registers_exactly_the_group_routes():
             methods_paths.add((method, route.path))
     assert methods_paths == {
         ("POST", "/api/groups"),
+        ("POST", "/api/groups/delete"),
         ("PATCH", "/api/groups/{group_id}"),
         ("GET", "/api/rifles/{rifle_id}/group-defaults"),
         ("GET", "/api/suppressors"),
@@ -1642,32 +1643,6 @@ class TestPageContexts:
         assert context["detail"].days == []
         assert context["defaults"].source_group_id is None
         assert __import__("json").loads(context["state_json"])["defaults"]["distance_yd"] is None
-
-    def test_the_dashboard_lists_the_latest_groups_by_date_time_and_id(
-        self, app, client, world, monkeypatch
-    ):
-        captured = _Captured(app, monkeypatch)
-        groups = [
-            world.group(offsets=FIVE, context=world.ctx(date=day, time=clock))
-            for day, clock in [
-                ("2026-09-01", "09:00:00"),
-                ("2026-09-02", None),
-                ("2026-09-02", "07:00:00"),
-                ("2026-09-02", "07:00:00"),
-            ]
-        ]
-
-        response = client.get("/")
-        recent = captured.context("index.html")["dashboard"].recent_groups
-
-        assert response.status_code == 200
-        assert [r.group.id for r in recent] == [
-            groups[3].id,
-            groups[2].id,
-            groups[1].id,
-            groups[0].id,
-        ]
-        assert recent[0].rifle_name == "Mine"
 
     def test_the_group_page_gets_suppressors_and_position_labels(
         self, app, client, world, monkeypatch

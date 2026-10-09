@@ -17,7 +17,7 @@ from datetime import date, time
 
 from rga.db import repo_groups, repo_rifles
 from rga.db.repo_groups import NewShot
-from rga.db.rows import GroupRow, LoadRow, RifleRow, ShotRow
+from rga.db.rows import GroupRow, LoadRow, PhotoRow, RifleRow, ShotRow
 from rga.domain.stats import group_stats as compute_group_stats
 from rga.domain.types import GroupStats, PlanePoint, Shot, ShotOrigin, ShotTimeSource
 from rga.domain.units import in_to_mil, in_to_moa, offset_from_aim
@@ -299,6 +299,31 @@ def save_review(
         )
         _write_offsets(conn, updated, repo_groups.list_shots(conn, group_id))
     return load_group(conn, group_id)
+
+
+@dataclass(frozen=True)
+class DeletedGroups:
+    """What `delete_groups` removed: the group count and the photos no group uses any more (their
+    rows are gone; the caller removes their files)."""
+
+    deleted: int
+    photos: list[PhotoRow]
+
+
+def delete_groups(conn: sqlite3.Connection, group_ids: Sequence[int]) -> DeletedGroups:
+    """Delete the groups, all or none: raises `GroupNotFound` (nothing deleted) when any id does
+    not exist. A photo that no remaining group uses is deleted too, so adding it again starts
+    afresh; a photo another group still uses stays."""
+    unique = list(dict.fromkeys(group_ids))
+    with _write_transaction(conn):
+        photo_ids = [
+            group.photo_id
+            for group in (_require_group(conn, group_id) for group_id in unique)
+            if group.photo_id is not None
+        ]
+        deleted = repo_groups.delete_groups(conn, unique)
+        photos = repo_groups.delete_unused_photos(conn, list(dict.fromkeys(photo_ids)))
+    return DeletedGroups(deleted, photos)
 
 
 def finalize(conn: sqlite3.Connection, group_id: int) -> GroupBundle:

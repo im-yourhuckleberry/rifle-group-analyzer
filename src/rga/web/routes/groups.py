@@ -9,15 +9,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 
+from rga.config import Settings
 from rga.services import group_records as service
-from rga.services.groups import GroupError, masks_poi
+from rga.services import photos as photo_service
+from rga.services.groups import GroupError, delete_groups, masks_poi
 from rga.web.app import ApiError
-from rga.web.deps import get_db
+from rga.web.deps import get_db, get_settings
 from rga.web.schemas import (
     ROUTE_SCHEMAS,
     GroupCreate,
     GroupDefaultsOut,
     GroupOut,
+    GroupsDeleteOut,
+    GroupsDeleteRequest,
     GroupUpdate,
     PlanePointOut,
     RoiPxOut,
@@ -26,6 +30,7 @@ from rga.web.schemas import (
 )
 
 router = APIRouter()
+AppSettings = Annotated[Settings, Depends(get_settings)]
 Conn = Annotated[sqlite3.Connection, Depends(get_db)]
 BUSY_RETRY_SECONDS = "1"
 
@@ -161,6 +166,19 @@ def get_group_defaults(rifle_id: int, conn: Conn) -> GroupDefaultsOut:
     """Values to pre-fill a new group of the rifle (all null when there is no earlier group)."""
     with _mapped_errors():
         return GroupDefaultsOut.model_validate(service.group_defaults(conn, rifle_id))
+
+
+@router.post("/api/groups/delete", response_model=_response("POST", "/api/groups/delete"))
+def post_groups_delete(
+    body: GroupsDeleteRequest, conn: Conn, settings: AppSettings
+) -> GroupsDeleteOut:
+    """Delete the chosen groups (the Groups tab's Edit mode), all or none: 404 `group_not_found`
+    when any id is unknown. Shots, rejections, zero checks and any saved combination that
+    included one of them go too, and so does a photo no remaining group uses (row and files)."""
+    with _mapped_errors():
+        result = delete_groups(conn, body.group_ids)
+    photo_service.remove_photo_files(settings, result.photos)
+    return GroupsDeleteOut(deleted=result.deleted)
 
 
 @router.patch("/api/groups/{group_id}", response_model=_response("PATCH", "/api/groups/{id}"))

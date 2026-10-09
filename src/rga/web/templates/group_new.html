@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "group_form_fields.html" import group_form_fields %}
+{% from "leave_dialog.html" import leave_dialog %}
+{% block title %}New group · {{ detail.rifle.name }}{% endblock %}
+{% block content %}
+<div data-page="group-new" data-rifle-id="{{ detail.rifle.id }}" class="stack group-new">
+  <div class="page-head group-new-head">
+    <div>
+      <h1>New group</h1>
+      <p class="muted" id="new-group-rifle">{{ detail.rifle.name }} &middot; {{ detail.rifle.cartridge }}</p>
+    </div>
+    <ol class="stepper" aria-label="Progress">
+      <li class="current">1. Group details</li>
+      <li>2. Confirm reference</li>
+      <li>3. Set aim point</li>
+      <li>4. Review shots</li>
+    </ol>
+    <a class="button secondary" href="/groups" id="new-group-cancel" data-leave>Cancel</a>
+  </div>
+
+  <div class="row group-new-body">
+    <section class="card stack grow" id="new-group-card" aria-label="Group details" data-state="{{ state_json }}">
+      <h2>Group details</h2>
+      {{ group_form_fields(detail, defaults, position_labels, today, pending_photo) }}
+    </section>
+
+    {% if pending_photo %}
+    <aside class="card stack new-group-photo" aria-label="Target photo">
+      <h2>Target photo</h2>
+      <img id="new-group-photo" src="/api/photos/{{ pending_photo.id }}/image?variant=oriented" alt="The target photo for this group">
+    </aside>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/group_form.js"></script>
+{{ leave_dialog() }}
+{% endblock %}

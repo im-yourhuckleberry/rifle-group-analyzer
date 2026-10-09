@@ -601,6 +601,7 @@ class ImageVariant(StrEnum):
 
     ORIENTED = "oriented"
     WORKING = "working"
+    THUMB = "thumb"
 
 
 class ImageQuery(RequestModel):
@@ -1299,6 +1300,18 @@ class RouteSchema:
     query: type[BaseModel] | None = None
 
 
+class GroupsDeleteRequest(RequestModel):
+    """`POST /api/groups/delete`: the groups to delete (1 to 500 ids; repeats count once)."""
+
+    group_ids: list[PositiveId] = Field(min_length=1, max_length=500)
+
+
+class GroupsDeleteOut(ResponseModel):
+    """How many groups `POST /api/groups/delete` removed."""
+
+    deleted: int
+
+
 ROUTE_SCHEMAS: dict[tuple[str, str], RouteSchema] = {
     ("GET", "/healthz"): RouteSchema(response=HealthOut),
     ("GET", "/api/calibers"): RouteSchema(response=list[CaliberOut]),
@@ -1331,6 +1344,7 @@ ROUTE_SCHEMAS: dict[tuple[str, str], RouteSchema] = {
     ("POST", "/api/groups/{id}/fill-shortfall"): RouteSchema(response=DetectOut),
     ("PUT", "/api/groups/{id}/review"): RouteSchema(request=ReviewRequest, response=GroupDetailOut),
     ("POST", "/api/groups/{id}/finalize"): RouteSchema(response=GroupDetailOut),
+    ("POST", "/api/groups/delete"): RouteSchema(request=GroupsDeleteRequest, response=GroupsDeleteOut),
     ("GET", "/api/groups/{id}"): RouteSchema(response=GroupDetailOut),
     ("GET", "/api/groups/{id}/stats"): RouteSchema(response=GroupStatsOut | SizeOnlyStatsOut),
     ("PATCH", "/api/groups/{id}"): RouteSchema(request=GroupUpdate, response=GroupOut),

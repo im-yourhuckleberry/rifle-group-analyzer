@@ -45,6 +45,8 @@ KIND_LABELS: tuple[tuple[str, str], ...] = (
     (ReferenceKind.GRID_1IN.value, "1 inch grid"),
     (ReferenceKind.CIRCLE_1IN.value, "1 inch circle"),
     (ReferenceKind.CIRCLE_1_5IN.value, "1.5 inch circle"),
+    (ReferenceKind.CIRCLE_2IN.value, "2 inch circle"),
+    (ReferenceKind.CIRCLE_2_5IN.value, "2.5 inch circle"),
     (ReferenceKind.CIRCLE_3IN.value, "3 inch circle"),
 )
 MEDIA_TYPES = {".jpg": "image/jpeg", ".png": "image/png"}
@@ -247,7 +249,12 @@ def reference_page(
     """The reference page: pick or mark the printed reference, then continue to review."""
     with _mapped_errors():
         photo = photo_service.page_photo(conn, id, group_id)
-        locked = photo_service.reference_locked(conn, id)
+        # On a group's own reference step only the other groups can fix the scale.
+        locked = photo_service.reference_locked(conn, id, group_id)
+        own_work = group_id is not None and photo_service.group_has_work(conn, group_id)
+        preferred = photo_service.preferred_reference_kind(conn)
+    # The dropdown starts on this photo's own kind, else the kind past groups used most.
+    default_kind = (photo.reference_kind if photo.reference_confirmed else None) or preferred
     back = safe_return_to(return_to) or "/"
     review_url = None
     if group_id is not None:
@@ -258,12 +265,14 @@ def reference_page(
         request,
         "reference.html",
         {
-            "active": "home",
+            "active": "groups",
             "photo": _photo_out(photo),
             "locked": locked,
             "group_id": group_id,
             "review_url": review_url,
             "return_to": back,
             "kinds": KIND_LABELS,
+            "default_kind": default_kind,
+            "own_work": own_work and not locked,
         },
     )

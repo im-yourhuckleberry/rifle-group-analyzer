@@ -11,7 +11,6 @@
   <h1>Group {{ g.id }}
     <span class="badge">{{ g.status }}</span>
     <span class="badge">{{ g.purpose|replace("_", " ") }}</span>
-    {% if stats and stats.includes_estimated %}<span class="badge warn">includes estimated shots</span>{% endif %}
   </h1>
   <p class="muted" id="group-header">
     {{ v.rifle.name }} &middot; {{ v.load.label }} &middot; lot {{ v.lot_code }} &middot;
@@ -165,7 +164,6 @@
       {% elif not page.poi_text %}
       <p class="notice info">Mark the aim point in the editor to see the mean POI.</p>
       {% endif %}
-      {% if stats.includes_estimated %}<p class="notice">Some shots are estimated inside a torn hole. The numbers include them.</p>{% endif %}
       {% else %}
       <p class="muted">Statistics appear once the group has shots.</p>
       {% endif %}

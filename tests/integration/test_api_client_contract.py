@@ -1305,11 +1305,10 @@ REQUIRED_CALLS = {
     # review editor
     key("PUT", "/api/groups/{}/review"),
     key("POST", "/api/groups/{}/detect"),
-    key("POST", "/api/groups/{}/fill-shortfall"),
     key("POST", "/api/groups/{}/finalize"),
-    key("POST", "/api/photos/{}/snap-aim"),
     # groups, photos, references, rifles, comparison, dope, search
     key("PATCH", "/api/groups/{}"),
+    key("POST", "/api/groups/delete"),  # the Groups tab's Edit mode
     key("POST", "/api/photos"),
     key("POST", "/api/photos/{}/reference/propose"),
     key("POST", "/api/photos/{}/reference/confirm"),
@@ -1331,13 +1330,11 @@ REQUIRED_READS = {
     ("GET /api/groups", "masked"),  # B-43: the picker reads the server's masking decision
     ("GET /api/groups", "shots_expected"),
     ("GET /api/groups", "zero_id"),
-    ("POST /api/groups/{}/detect", "aim_candidates"),  # B-49: POA suggestions
     ("PUT /api/groups/{}/review", "shots"),
     ("GET /api/zeros/{}", "advice"),
     ("GET /api/zeros/{}", "groups"),
     ("POST /api/zeros/{}/checks", "route"),
-    ("POST /api/photos/{}/snap-aim", "snapped"),
-    ("POST /api/photos", "reference_confirmed"),
+    ("POST /api/photos", "id"),  # "Add new group" hands the uploaded photo to the New group page
     ("GET /api/rifles/{}/comparison", "loads"),
     ("GET /api/loads/{}/dope", "rows"),
     ("POST /api/aggregate", "shots"),
@@ -1792,9 +1789,9 @@ PLANTS = {
     ),
     "a missing response field": (
         "review.js",
-        "proposal.aim_candidates || []",
-        "proposal.aim_candidate || []",
-        "has no field `aim_candidate`",
+        "proposal.bullet_diameter_in);",
+        "proposal.bullet_diameter_inch);",
+        "has no field `bullet_diameter_inch`",
     ),
     "a missing field on list items": (
         "analysis.js",

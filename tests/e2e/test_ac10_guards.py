@@ -4,8 +4,8 @@
   before the editor will detect anything.
 - The one way to remove a shot is "Not a bullet hole"; Finalize stays off at 9 of 10 and the
   server refuses it too.
-- Two groups share one multi-aim photo, each fenced by its own region (no rejection is ever needed to clear the other groups' holes), and the aim suggestions
-  are never pre-selected (T4.0a): the shooter clicks a ring or presses Next, then Use.
+- Two groups share one multi-aim photo, each fenced by its own region (no rejection is ever needed to clear the other groups' holes); the aim starts on the circle center
+  and each group's own aim is clicked by hand (T4.0a).
 
 Rifles use a .224 bullet because the synthetic targets are shot with one; the default 6.5 Creedmoor
 diameter (.264) would size the detector's holes wrongly for these photos.
@@ -57,8 +57,11 @@ def test_a_photo_without_a_reference_needs_a_manual_one_before_detect(app: App) 
     ref = app.add_group(ctx, shots=expected, photo=target)
 
     assert app.find_references("circle1") == 0
-    assert app.page.locator("#candidates-empty").is_visible()
-    assert app.page.locator("#confirm-candidate").is_disabled()
+    assert app.page.locator("#manual-panel").is_visible(), (
+        "nothing found: switch to marking by hand"
+    )
+    assert "Nothing was found automatically" in app.page.locator("#warnings").inner_text()
+    assert app.page.locator("#reference-next").is_disabled()
     assert app.find_references("grid") == 0
     assert "/reference" in app.path()
 
@@ -84,6 +87,8 @@ def test_a_photo_without_a_reference_needs_a_manual_one_before_detect(app: App) 
     app.confirm_reference("circle1", manual=marks)
     app.wait_path(r"/groups/\d+/review.*")
     app.review_wait_ready()
+    assert app.review_step() == "aim"
+    app.review_mark_aim(truth_aim_px=target.truth["groups"][0]["aim_px"], photo_id=ref.photo_id)
 
     assert app.page.locator("#detect-button").is_enabled()
     assert app.review_counts()[1] == expected
@@ -169,38 +174,42 @@ def test_two_groups_share_one_photo_each_fenced_by_its_region_and_aims_are_never
         ref = app.add_group(ctx, shots=len(groups[k]["hole_indices"]), photo=target)
         if k == 0:
             app.confirm_reference("circle1", candidate="truth", truth=target.truth)
-            app.wait_path(r"/groups/\d+/review.*")
+        else:
+            # The same photo again: the first group's saved shots fix its scale, so Next goes on.
+            assert app.page.locator("#locked-scale").is_visible()
+            app.page.locator("#reference-next").click()
+        app.wait_path(r"/groups/\d+/review.*")
         app.review_wait_ready()
         group_id = int(app.wait_path(r"/groups/(\d+)/review")[1])
         x0, y0, x1, y1 = groups[k]["roi_px"]
         region = app.truth_to_working([(x0, y0), (x1, y1)], ref.photo_id)
-        if k == 1:
-            assert "Draw a region first" in app.page.locator("#review-notices").inner_text()
-            assert app.review_counts()[0] == 0, "a second group on a photo is never auto-detected"
-        app.review_set_region(*region[0], *region[1])
-        if k == 0:
-            assert app.review_counts()[0] > 5, "the whole-photo guess proposes every group's holes"
+        own = app.truth_to_working([tuple(groups[k]["aim_px"])], ref.photo_id)[0]
+
+        # The aim comes first, alone: no shot is drawn until it is confirmed.
+        assert app.review_step() == "aim"
+        assert app.review_shots() == [], "no shot is shown before the aim is confirmed"
+        assert group_row(app, group_id)["aim_x_in"] is None
+        # The aim starts on the circle's center (not saved until confirmed); each group's own aim
+        # is placed by hand, exactly where it is clicked, which switches to "Mark it by hand".
+        assert app.review_aim_mode() == "center"
+        assert app.page.locator("#editor-svg circle.aim-candidate").count() == 0
+        app.review_mark_aim(own, confirm=False)
+        assert app.review_aim_mode() == "hand"
+        app.review_confirm_aim()
+        assert app.review_counts()[0] > 5, "the whole-photo guess proposes every group's holes"
+        # The editor has no region control; the group's region is set through the API the
+        # editor's Detect uses, then the editor is reopened.
+        roi = {
+            "x0": int(region[0][0]),
+            "y0": int(region[0][1]),
+            "x1": int(region[1][0]),
+            "y1": int(region[1][1]),
+        }
+        app.api("POST", f"/api/groups/{group_id}/detect", {"roi_px": roi})
+        app.page.reload()
+        app.review_wait_ready()
         app.review_detect()
         assert app.review_counts() == (5, 5), app.review_counter()
-
-        assert app.review_aim_suggestion_visible()
-        assert "none selected" in app.page.locator("#aim-suggestion-text").inner_text()
-        assert app.page.locator("#editor-svg circle.aim-candidate").count() >= 2
-        assert app.page.locator("#editor-svg circle.aim-candidate.active").count() == 0
-        assert app.page.locator("#aim-use-button").is_disabled()
-        assert "Aim point is set" not in app.review_aim_status()
-        assert group_row(app, group_id)["aim_x_in"] is None
-
-        own = app.truth_to_working([tuple(groups[k]["aim_px"])], ref.photo_id)[0]
-        if k == 0:
-            app.page.locator("#aim-next-button").click()
-            assert app.page.locator("#editor-svg circle.aim-candidate.active").count() == 1
-        else:
-            app.page.mouse.click(*app.working_to_client(*own))
-            assert app.page.locator("#aim-suggestion-text").inner_text().startswith("Suggested aim")
-        assert app.page.locator("#aim-use-button").is_enabled()
-        app.page.locator("#aim-use-button").click()
-        app.page.locator("#aim-status", has_text="Aim point is set").wait_for()
         app.review_save()
         app.review_finalize(expect_url=r"/(?:groups|rifles)/\d+(?:\?.*)?$")
         made.append((group_id, ref.photo_id))

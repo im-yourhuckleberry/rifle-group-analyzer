@@ -36,7 +36,9 @@ def settle(app: App) -> dict:
 
 
 def photo_width(app: App) -> float:
-    return app.page.evaluate("() => Number(document.querySelector('#editor-svg image').getAttribute('width'))")
+    return app.page.evaluate(
+        "() => Number(document.querySelector('#editor-svg image').getAttribute('width'))"
+    )
 
 
 def drag(app: App, dx: float, dy: float, steps: int) -> None:
@@ -124,19 +126,22 @@ def test_reduced_motion_zooms_in_one_step_and_does_not_coast(app: App) -> None:
 
 
 def test_aim_mode_pans_on_drag_and_places_on_release(app: App) -> None:
-    open_editor(app)
+    rifle_id = app.create_rifle()
+    app.create_load(rifle_id)
+    app.photo_group_to_review(app.group_context(rifle_id), "clean_circle1", aim=False)
+    assert app.review_step() == "aim"
     app.review_zoom("in")
-    app.page.locator("#aim-button").click()
     before = view(app)
 
     drag(app, -50, -30, steps=6)
     app.page.mouse.up()
     assert view(app)["x"] != before["x"], "a drag in aim mode pans"
-    assert app.review_aim_status() == "Aim point is not set."
+    assert app.review_aim_mode() == "center", "a pan leaves the aim on the circle's center"
 
     v = view(app)
     app.page.mouse.click(v["left"] + v["width"] / 2, v["top"] + v["height"] / 2)
-    app.page.locator("#aim-status", has_text="Aim point is set").wait_for()
+    app.page.locator("#aim-status", has_text="Aim point is set where you clicked").wait_for()
+    assert app.review_aim_mode() == "hand"
 
 
 def test_a_slow_detect_labels_its_button_and_marks_the_photo_busy(app: App) -> None:
@@ -154,3 +159,37 @@ def test_a_slow_detect_labels_its_button_and_marks_the_photo_busy(app: App) -> N
     app.page.locator("#detect-button:enabled").wait_for()
     assert app.page.locator("#detect-button").inner_text().strip() == "Detect holes"
     assert app.page.locator("#editor-wrap").get_attribute("aria-busy") == "false"
+
+
+def test_the_aim_goes_exactly_where_clicked_and_a_drag_on_it_moves_it_without_snapping(
+    app: App,
+) -> None:
+    rifle_id = app.create_rifle()
+    app.create_load(rifle_id)
+    app.photo_group_to_review(app.group_context(rifle_id), "clean_circle1", aim=False)
+    snaps: list[str] = []
+    app.page.on("request", lambda r: snaps.append(r.url) if "snap-aim" in r.url else None)
+    app.review_zoom("fit")
+
+    def aim_px() -> tuple[float, float]:
+        mark = app.page.locator("#editor-svg circle.aim-mark")
+        return float(mark.get_attribute("cx")), float(mark.get_attribute("cy"))
+
+    target = (120.0, 140.0)
+    app.review_click(*target)
+    placed = aim_px()
+    per_px = app.review_view()["w"] / app.review_view()["width"]
+    assert abs(placed[0] - target[0]) <= per_px and abs(placed[1] - target[1]) <= per_px
+
+    sx, sy = app.working_to_client(*placed)
+    grab = (sx + 3, sy + 2)
+    app.page.mouse.move(*grab)
+    app.page.mouse.down()
+    app.page.mouse.move(grab[0] + 40, grab[1] + 25, steps=8)
+    app.page.mouse.up()
+
+    moved = aim_px()
+    assert moved[0] - placed[0] == pytest.approx(40 * per_px, abs=per_px)
+    assert moved[1] - placed[1] == pytest.approx(25 * per_px, abs=per_px)
+    assert "dropped" in app.review_aim_status()
+    assert snaps == [], "the aim never snaps to the printed mark"

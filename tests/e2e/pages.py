@@ -20,7 +20,7 @@ import re
 import sqlite3
 import time as clock
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -688,14 +688,23 @@ class App:
         value such as `grid_1in`), press Find, and return how many proposals appeared."""
         value = REFERENCE_KINDS.get(kind, kind)
         self.page.locator("#kind").select_option(value)
-        self.page.locator("#find").click()
-        self.page.locator("#candidates-panel").wait_for()
+        self.page.locator("#find:enabled").click()
         self.page.locator("#find:enabled").wait_for()
+        # Nothing found switches the toggle to "Mark it by hand"; otherwise the outlines are listed.
+        self.page.locator(
+            "#candidates-panel:not([hidden]), #manual-panel:not([hidden])"
+        ).first.wait_for()
+        if self.page.locator("#single-candidate").count():
+            return 1  # one outline found: it is already the choice, with no radio
         return self.page.locator('#candidates input[name="candidate"]').count()
 
     def candidate_centres(self) -> list[tuple[float, float]]:
-        """Centre, in image px, of each drawn proposal in index order (before one is selected)."""
-        return self.page.evaluate(
+        """Centre, in image px, of each drawn proposal in index order.
+
+        The page draws the focused (selected) proposal last so it sits on top; it is moved back to
+        its own index here.
+        """
+        centres = self.page.evaluate(
             """() => [...document.querySelectorAll('#overlay > *')].map((node) => {
               if (node.tagName === 'ellipse') return [Number(node.getAttribute('cx')), Number(node.getAttribute('cy'))];
               if (node.tagName === 'polygon') {
@@ -705,6 +714,13 @@ class App:
               return null;
             }).filter((c) => c !== null)"""
         )
+        focus = self.page.evaluate(
+            """() => [...document.querySelectorAll('#candidates input[name="candidate"]')]
+              .findIndex((input) => input.checked)"""
+        )
+        if 0 <= focus < len(centres) and len(centres) > 1:
+            centres.insert(focus, centres.pop())
+        return centres
 
     @staticmethod
     def truth_reference_centre(truth: dict) -> tuple[float, float]:
@@ -729,8 +745,8 @@ class App:
         `candidate` is a proposal index, or "truth" to pick the proposal nearest the printed
         reference of `truth` (an aim dot can look like a 1 inch circle). With `manual` (image-px
         marks: 3+ circle edge points, or 4 grid corners TL, TR, BR, BL plus `squares=(across, down)`)
-        the reference is marked by hand instead. When it confirms without warnings the app moves to
-        the review page and, with `wait_for_review`, this waits for it.
+        the reference is marked by hand instead. Next confirms it and the app moves to the review
+        page; with `wait_for_review`, this waits for it.
         """
         if manual is None:
             count = self.find_references(kind)
@@ -743,8 +759,11 @@ class App:
                 index = min(
                     range(len(centres)), key=lambda i: np.hypot(*(np.array(centres[i]) - target))
                 )
-            self.page.locator('#candidates input[name="candidate"]').nth(int(index)).check()
-            self.page.locator("#confirm-candidate").click()
+            if count > 1:
+                self.page.locator('#candidates input[name="candidate"]').nth(int(index)).check()
+            else:
+                assert int(index) == 0, "only one outline was found"
+            self.page.locator("#reference-next").click()
         else:
             self.page.locator("#kind").select_option(REFERENCE_KINDS.get(kind, kind))
             self.page.locator("#manual-toggle").click()
@@ -752,46 +771,16 @@ class App:
             if squares is not None:
                 self.page.locator("#squares-x").fill(str(squares[0]))
                 self.page.locator("#squares-y").fill(str(squares[1]))
-            self.page.locator("#confirm-manual").click()
+            self.page.locator("#reference-next").click()
         return self._settle_reference(wait_for_review)
 
     def _settle_reference(self, wait_for_review: bool) -> list[str]:
-        """Wait for what a confirm leads to and return the warnings shown, if any.
-
-        The outcome is the review page (no warnings), or the reference page's result card; with
-        `wait_for_review` a card that offers a review link is followed. Each look at the page is one
-        atomic read, so a navigation between a look and the next step cannot fail it.
-        """
-        review = re.compile(rf"^{re.escape(self.base)}/groups/\d+/review")
-        deadline = clock.monotonic() + 30
-        while clock.monotonic() < deadline:
-            state = self._read_page(
-                """() => {
-                  const result = document.getElementById("result");
-                  const shown = result && !result.hidden && result.getClientRects().length > 0;
-                  const next = document.getElementById("continue");
-                  return {
-                    url: location.href,
-                    shown: !!shown,
-                    warnings: shown
-                      ? [...document.querySelectorAll("#result-warnings .notice")].map((e) => e.innerText)
-                      : [],
-                    next: next ? next.getAttribute("href") : null,
-                  };
-                }"""
-            )
-            if review.match(state["url"]):
-                return []
-            if state["shown"]:
-                if wait_for_review and state["next"] and "/review" in state["next"]:
-                    with suppress(PlaywrightError):
-                        self.page.locator("#continue").click(timeout=3000)
-                    self.page.wait_for_url(review)
-                return state["warnings"]
-            self.page.wait_for_timeout(100)
-        raise AssertionError(
-            f"neither the result card nor the review page appeared: {self.page.url}"
-        )
+        """Next confirms and moves straight on (to the review page, or the page it came from);
+        with `wait_for_review` this waits for the review page. Returns the warnings left on the
+        reference page (none: a tilted photo is flagged on its option before Next)."""
+        if wait_for_review:
+            self.page.wait_for_url(re.compile(rf"^{re.escape(self.base)}/groups/\d+/review"))
+        return []
 
     @staticmethod
     def circle_edge_points(truth: dict, count: int = 6) -> list[tuple[float, float]]:
@@ -815,9 +804,27 @@ class App:
     # --------------------------------------------------------------------------- review editor
 
     def review_wait_ready(self) -> None:
-        """Wait for the review editor to draw its photo and for the automatic detect to finish."""
+        """Wait for the review editor to draw its photo and for its automatic detect to finish
+        (on the aim step it looks for aim marks; on the shots step it proposes the shots)."""
         self.page.locator("#editor-svg image").wait_for()
-        self.page.locator("#detect-button:enabled").wait_for()
+        self.page.locator('#editor-wrap[aria-busy="false"]').wait_for()
+        if self.review_step() == "shots" and self.page.locator("#detect-button").is_visible():
+            self.page.locator("#detect-button:enabled").wait_for()
+
+    def review_step(self) -> str:
+        """The review step on show: "aim" or "shots"."""
+        return "aim" if self.page.locator("#step-aim").is_visible() else "shots"
+
+    def review_confirm_aim(self) -> None:
+        """Press "Confirm aim point" (it saves the aim) and wait for the shots step to be ready."""
+        self.page.locator("#aim-confirm-button:enabled").click()
+        self.page.locator("#step-shots").wait_for()
+        self.review_wait_ready()
+
+    def review_back_to_aim(self) -> None:
+        """Press Go back on the shots step and wait for the aim step."""
+        self.page.locator("#shots-back-button").click()
+        self.page.locator("#step-aim").wait_for()
 
     def review_counter(self) -> str:
         """The "N of M shots" counter text."""
@@ -840,18 +847,12 @@ class App:
             self.page.locator("#detect-button").click()
         self.page.locator("#detect-button:enabled").wait_for()
 
-    def review_fill(self) -> None:
-        """Press Fill shortfall (it saves first) and wait until the editor is idle again."""
-        with self.page.expect_response(re.compile(r"/api/groups/\d+/fill-shortfall$")):
-            self.page.locator("#fill-button").click()
-        self.page.locator("#fill-button:enabled").wait_for()
-
     def review_set_region(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        """Press "Set region" and drag a rectangle over working-px (x0, y0)-(x1, y1) (editor at Fit)."""
+        """Drag a rectangle over working-px (x0, y0)-(x1, y1) (editor at Fit). There is no region
+        button: the editor asks for a region itself (Detect on a photo other groups share), so
+        this only works while it is asking."""
+        assert "Drag a rectangle" in self.page.locator("#editor-hint").inner_text()
         self.review_zoom("fit")
-        button = self.page.locator("#region-button")
-        if button.inner_text().strip() != "Drag a region":
-            button.click()
         sx, sy = self.working_to_client(x0, y0)
         ex, ey = self.working_to_client(x1, y1)
         self.page.mouse.move(sx, sy)
@@ -860,10 +861,13 @@ class App:
         self.page.mouse.up()
 
     def review_save(self) -> None:
-        """Press Save and wait until it finishes."""
+        """Press Done (it always saves) and wait for the save; when the group is ready Done then
+        offers to lock it, which this declines with "Keep editing"."""
         with self.page.expect_response(re.compile(r"/api/groups/\d+/review$")):
-            self.page.locator("#save-button").click()
-        self.page.locator("#save-button:enabled").wait_for()
+            self.page.locator("#finalize-button").click()
+        self.page.locator("#finalize-button:enabled").wait_for()
+        if self.page.locator("#finalize-confirm").is_visible():
+            self.page.locator("#finalize-cancel-button").click()
 
     def review_shots(self) -> list[dict]:
         """The drawn shots in order: class (origin), centre in working px, radius, selected."""
@@ -901,12 +905,11 @@ class App:
         )
 
     def review_zoom(self, how: str) -> float:
-        """Zoom the editor: "in", "out", "fit" or "region"; returns the zoom level shown."""
+        """Zoom the editor: "in", "out" or "fit"; returns the zoom level shown."""
         button = {
             "in": "#zoom-in-button",
             "out": "#zoom-out-button",
             "fit": "#zoom-fit-button",
-            "region": "#zoom-region-button",
         }[how]
         self.page.locator(button).click()
         return float(self.page.locator("#zoom-level").inner_text().rstrip("×x").strip())
@@ -941,22 +944,26 @@ class App:
         """Press "Not a bullet hole" for the selected shot (the only delete control)."""
         self.page.locator("#delete-button").click()
 
-    def review_aim_suggestion_visible(self) -> bool:
-        """True while the editor offers possible aim marks (none is chosen for the user)."""
-        return self.page.locator("#aim-suggestion").is_visible()
+    def review_aim_mode(self) -> str | None:
+        """ "center" or "hand" (the pressed aim toggle), or None when no toggle is shown (a grid
+        reference has no circle center)."""
+        if not self.page.locator("#aim-mode").is_visible():
+            return None
+        pressed = self.page.get_attribute("#aim-center-toggle", "aria-pressed") == "true"
+        return "center" if pressed else "hand"
 
     def review_aim_status(self) -> str:
         """Text of the aim status line."""
         return self.page.locator("#aim-status").inner_text().strip()
 
-    def review_use_suggested_aim(self, nexts: int = 0) -> None:
-        """Pick a suggested aim mark: press Next `nexts` times (the first press selects the first
-        mark; none is selected beforehand), then "Use this aim"."""
-        self.page.locator("#aim-suggestion").wait_for()
-        for _ in range(max(nexts, 1)):
-            self.page.locator("#aim-next-button").click()
-        self.page.locator("#aim-use-button").click()
-        self.page.locator("#aim-status", has_text="Aim point is set").wait_for()
+    def review_use_circle_center(self, *, confirm: bool = False) -> None:
+        """Switch the aim toggle to "Use the circle's center" (a printed-circle reference starts
+        there). With `confirm`, also confirm the aim and move on to the shots step."""
+        if self.review_aim_mode() != "center":
+            self.page.locator("#aim-center-toggle:enabled").click()
+        self.page.locator("#aim-status", has_text="the circle's exact center").wait_for()
+        if confirm:
+            self.review_confirm_aim()
 
     def review_mark_aim(
         self,
@@ -964,23 +971,27 @@ class App:
         *,
         truth_aim_px: tuple[float, float] | None = None,
         photo_id: int | None = None,
+        confirm: bool = True,
     ) -> str:
-        """Mark the aim by hand: press "Mark aim" and click the mark; the page snaps to its centre.
+        """Mark the aim by hand on the aim step (going back to it from the shots step first): the
+        click places it exactly there (no snap). Then, with `confirm` (the default), confirm the aim
+        and wait for the shots step.
 
         Give the working-px position, or `truth_aim_px` (the rendered photo's aim in image px) plus
-        `photo_id` to convert it through the confirmed reference. Returns the aim status text
-        ("Aim snapped to the mark." or "Aim set where you clicked.").
+        `photo_id` to convert it through the confirmed reference. Returns the aim status text read
+        before confirming ("Aim point is set where you clicked.").
         """
         if working_px is None:
             assert truth_aim_px is not None and photo_id is not None
             working_px = self.truth_to_working([truth_aim_px], photo_id)[0]
-        if self.review_aim_suggestion_visible():
-            self.page.locator("#aim-manual-button").click()
-        else:
-            self.page.locator("#aim-button").click()
+        if self.review_step() == "shots":
+            self.review_back_to_aim()
         self.review_click(*working_px)
-        self.page.locator("#aim-status", has_text="Aim point is set").wait_for()
-        return self.review_aim_status()
+        self.page.locator("#aim-confirm-button:enabled").wait_for()
+        status = self.review_aim_status()
+        if confirm:
+            self.review_confirm_aim()
+        return status
 
     def truth_to_working(
         self, points_px: Sequence[tuple[float, float]], photo_id: int
@@ -1004,36 +1015,40 @@ class App:
         return [(float(x), float(y)) for x, y in mapped]
 
     def review_finalize(self, expect_url: str | None = r"/(?:groups|rifles)/\d+(?:\?.*)?$") -> None:
-        """Press Finalize, confirm it (it saves first) and wait for the page it moves to.
+        """Press Done (it saves), then "Lock and finish", and wait for the page it moves to.
 
         A group made on the rifle page returns there after finalizing; this then opens the group's
         own page so a journey can read its statistics. Pass `expect_url=None` to stay on the page
         (for a refused finalize).
         """
         match = re.search(r"/groups/(\d+)/review", self.path())
+        if expect_url is None:
+            # Refused: with a blocker Done only saves; the server would refuse the lock anyway.
+            with self.page.expect_response(re.compile(r"/api/groups/\d+/review$")):
+                self.page.locator("#finalize-button").click()
+            if self.page.locator("#finalize-confirm").is_visible():
+                self.page.locator("#finalize-confirm-button").click()
+            return
         self.page.locator("#finalize-button").click()
         self.page.locator("#finalize-confirm-button").click()
-        if expect_url is None:
-            return
         self.wait_path(expect_url)
         if match and not re.search(rf"/groups/{match[1]}(?:\?.*)?$", self.path()):
             self.open_group(int(match[1]))
 
     def review_finalize_enabled(self) -> bool:
-        """True when the Finalize button is enabled."""
-        return self.page.locator("#finalize-button").is_enabled()
+        """True when Done would finish the group: nothing blocks finalizing (Done itself is always
+        pressable; with a blocker it only saves)."""
+        return (
+            self.page.locator("#finalize-button").is_enabled() and not self.review_finalize_reason()
+        )
 
     def review_finalize_reason(self) -> str:
         """The reason text shown while Finalize is disabled (empty when it is enabled)."""
         return self.page.locator("#finalize-reason").inner_text().strip()
 
-    def review_estimated_badge_visible(self) -> bool:
-        """True when the "includes estimated shots" badge is shown in the editor."""
-        return self.page.locator("#estimated-badge").is_visible()
-
-    def review_spread_text(self) -> str:
-        """The live extreme-spread line of the editor."""
-        return self.page.locator("#spread-line").inner_text().strip()
+    def review_has_estimated_shots(self) -> bool:
+        """True when the editor draws at least one estimated ("est") shot."""
+        return self.page.locator("#editor-svg circle.shot.estimated").count() > 0
 
     def open_review(self, group_id: int, return_to: str | None = None) -> None:
         """Open a group's review page and wait for it to be ready."""
@@ -1053,11 +1068,14 @@ class App:
         load_label: str | None = None,
         elevation_mil: float | None = None,
         weather: dict[str, float] | None = None,
+        aim: bool = True,
     ) -> tuple[GroupRef, RenderedTarget]:
         """The common start of a journey: add a group with a photo and confirm its reference.
 
         Renders `scenario`, adds the group (shots default to the truth hole count), confirms the
-        proposal that is the printed reference, and returns with the review editor ready.
+        proposal that is the printed reference, and returns with the review editor ready. With
+        `aim` (the default) the truth aim is marked and confirmed, so the editor is on the shots
+        step; without it the editor stays on the aim step.
         """
         target = self.render_target(scenario, seed)
         expected = shots if shots is not None else len(target.truth["groups"][0]["hole_indices"])
@@ -1073,6 +1091,10 @@ class App:
         self.confirm_reference(kind, candidate="truth", truth=target.truth)
         self.wait_path(r"/groups/\d+/review.*")
         self.review_wait_ready()
+        if aim:
+            self.review_mark_aim(
+                truth_aim_px=target.truth["groups"][0]["aim_px"], photo_id=ref.photo_id
+            )
         return ref, target
 
     # ------------------------------------------------------------------------------ group page
@@ -1099,10 +1121,7 @@ class App:
             mean_dx_in=dx,
             mean_dy_in=dy,
             poi_text=None if mean is None else mean[0],
-            includes_estimated=self.main.locator(
-                ".badge", has_text="includes estimated shots"
-            ).count()
-            > 0,
+            includes_estimated=self.main.locator("circle.shot.estimated").count() > 0,
         )
 
     def open_group(self, group_id: int) -> None:

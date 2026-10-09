@@ -2,7 +2,8 @@
  * Rifle page groups: the "Add a group" form and the per-row photo actions. A chosen photo is
  * uploaded at once and fills in the date and time it was taken ("from photo"); weather opens once
  * the distance reaches the prompt distance and the group cannot be added until it is entered or
- * skipped. Every request goes through api.js; user text reaches the page only as text.
+ * skipped. A photo already uploaded from "Add new group" (`state.pending_photo`) starts attached.
+ * Every request goes through api.js; user text reaches the page only as text.
  */
 import { apiSend, apiUpload, ApiError } from "/static/js/api.js";
 import { wireSuppressorPicker } from "/static/js/suppressor_picker.js";
@@ -10,7 +11,7 @@ import { wireSuppressorPicker } from "/static/js/suppressor_picker.js";
 const card = document.getElementById("new-group-card");
 const flash = document.getElementById("flash");
 const state = card ? JSON.parse(card.dataset.state) : null;
-const returnTo = state ? encodeURIComponent(`/rifles/${state.rifle_id}`) : "";
+const returnTo = state ? encodeURIComponent(state.return_to || `/rifles/${state.rifle_id}`) : "";
 
 function show(message, kind) {
   flash.textContent = message;
@@ -44,21 +45,22 @@ function numberOrNull(id) {
   return text === "" ? null : Number(text);
 }
 
-function nextPageFor(groupId, photoId, confirmed) {
-  if (confirmed) return `/groups/${groupId}/review?return_to=${returnTo}`;
+function nextPageFor(groupId, photoId) {
+  // Always the reference step: a photo whose scale is already confirmed (the same photo added
+  // again) shows that reference there to check and keep, instead of skipping the step.
   return `/photos/${photoId}/reference?group_id=${groupId}&return_to=${returnTo}`;
 }
 
-async function attachPhoto(groupId, photoId, confirmed) {
+async function attachPhoto(groupId, photoId) {
   const patched = await run(() => apiSend("PATCH", `/api/groups/${groupId}`, { photo_id: photoId }));
-  if (patched) window.location.href = nextPageFor(groupId, photoId, confirmed);
+  if (patched) window.location.href = nextPageFor(groupId, photoId);
 }
 
 async function importPhoto(input) {
   const file = input.files[0];
   if (!file) return;
   const photo = await run(() => apiUpload("/api/photos", file));
-  if (photo) await attachPhoto(Number(input.dataset.groupId), photo.id, photo.reference_confirmed);
+  if (photo) await attachPhoto(Number(input.dataset.groupId), photo.id);
 }
 
 async function useExisting(button) {
@@ -68,8 +70,7 @@ async function useExisting(button) {
     show("Choose which group's photo to use.");
     return;
   }
-  const photoId = Number(select.value);
-  await attachPhoto(groupId, photoId, Boolean(state.photo_confirmed[String(photoId)]));
+  await attachPhoto(groupId, Number(select.value));
 }
 
 for (const input of document.querySelectorAll(".js-import")) {
@@ -82,7 +83,8 @@ for (const button of document.querySelectorAll(".js-use-existing")) {
 function wireGroupForm() {
   const suppressors = wireSuppressorPicker(card.querySelector("[data-suppressor-picker]"), show);
   const weatherIds = ["w-temp", "w-da", "w-wind", "w-clock"];
-  let photo = null;
+  const pending = state.pending_photo || null;
+  let photo = pending;
   let weatherSkipped = false;
   let weatherPrefilled = false;
 
@@ -140,16 +142,7 @@ function wireGroupForm() {
     weatherPrefilled = false;
   }
 
-  async function chosePhoto() {
-    const file = document.getElementById("g-photo").files[0];
-    photo = null;
-    if (!file) {
-      dateSource.textContent = "entered";
-      return;
-    }
-    const uploaded = await run(() => apiUpload("/api/photos", file));
-    if (!uploaded) return;
-    photo = uploaded;
+  function useTakenAt(uploaded) {
     if (uploaded.taken_at) {
       const [day, time] = uploaded.taken_at.split("T");
       document.getElementById("g-date").value = day;
@@ -159,6 +152,24 @@ function wireGroupForm() {
     } else {
       dateSource.textContent = "entered (the photo has no date)";
     }
+  }
+
+  async function chosePhoto() {
+    const file = document.getElementById("g-photo").files[0];
+    photo = null;
+    if (!file) {
+      // Clearing the chooser falls back to the photo brought from "Add new group", if any.
+      photo = pending;
+      if (pending) useTakenAt(pending);
+      else dateSource.textContent = "entered";
+      return;
+    }
+    const uploaded = await run(() => apiUpload("/api/photos", file));
+    if (!uploaded) return;
+    photo = uploaded;
+    document.getElementById("g-photo-note").textContent =
+      "Choosing a photo fills in the date and time it was taken.";
+    useTakenAt(uploaded);
   }
 
   function photoTimeUnchanged() {
@@ -215,7 +226,8 @@ function wireGroupForm() {
     }
     const group = await run(() => apiSend("POST", "/api/groups", body));
     if (!group) return;
-    if (photo) window.location.href = nextPageFor(group.id, photo.id, photo.reference_confirmed);
+    if (photo) window.location.href = nextPageFor(group.id, photo.id);
+    else if (state.return_to === "/groups") window.location.assign(`/groups/${group.id}`);
     else window.location.reload();
   }
 
@@ -254,6 +266,12 @@ function wireGroupForm() {
   document.getElementById("add-group").addEventListener("click", addGroup);
   refreshLotOptions();
   syncWeatherToDate();
+  if (pending) {
+    document.getElementById("g-photo-note").textContent =
+      "Your target photo is attached. Choose a file only to use a different one.";
+    useTakenAt(pending);
+    document.getElementById("g-load").focus({ preventScroll: true });
+  }
 }
 
 if (card && document.getElementById("add-group")) wireGroupForm();

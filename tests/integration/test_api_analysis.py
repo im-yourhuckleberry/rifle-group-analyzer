@@ -1053,7 +1053,7 @@ def test_the_group_page_shows_the_plot_stats_label_poi_words_and_notes(client, c
     html = page(client, f"/groups/{group.id}")
     assert ES_LABEL in html
     assert html.count('<circle class="shot ') == 4 and 'class="aim-mark"' in html
-    assert "0.1 mil high, 0.1 mil right" in html and "includes estimated shots" in html
+    assert "0.1 mil high, 0.1 mil right" in html and "includes estimated shots" not in html
     assert "windy morning 50% humidity" in html and "group note here" in html
     assert f'data-group-id="{group.id}"' in html and 'data-form="group-notes"' in html
     assert '<script type="module" src="/static/js/analysis.js">' in html

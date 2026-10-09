@@ -90,7 +90,7 @@ function groupsTable(groups) {
   const tbody = el("tbody");
   groups.forEach((group) => {
     const row = el("tr");
-    const shots = group.includes_estimated ? `${group.shots} (includes estimated shots)` : String(group.shots);
+    const shots = String(group.shots);
     const tier = group.tier === null ? "no tier" : group.tier === "tier10" ? "10-shot" : "30+";
     row.append(
       el("td", group.shot_time ? `${group.shot_date} ${group.shot_time.slice(0, 5)}` : group.shot_date),

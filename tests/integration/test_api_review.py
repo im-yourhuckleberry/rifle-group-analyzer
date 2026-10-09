@@ -258,6 +258,36 @@ class TestDetect:
 
         assert len(body["shots"]) == 10
 
+    def test_every_proposed_shot_lies_inside_the_region(self, client, conn, settings, world):
+        # A region edge through a ragged hole once let its estimated shots land outside the region.
+        sc = scene("ragged_10x7")
+        group = make_group(conn, world, make_photo(conn, settings))
+        whole = client.post(f"/api/groups/{group.id}/detect", json=roi_body(sc)).json()
+        x0, y0, x1, y1 = sc.roi
+        regions = [
+            region
+            for shot in whole["shots"]
+            for dx in (-6, -3, 0, 3, 6)
+            for region in (
+                (x0, y0, int(shot["x_in"] * sc.ppi + dx), y1),
+                (int(shot["x_in"] * sc.ppi + dx), y0, x1, y1),
+            )
+        ]
+
+        proposed = 0
+        for region in regions:
+            body = {"roi_px": dict(zip(("x0", "y0", "x1", "y1"), region, strict=True))}
+            detected = client.post(f"/api/groups/{group.id}/detect", json=body).json()
+            for shot in detected["shots"]:
+                x, y = shot["x_in"] * sc.ppi, shot["y_in"] * sc.ppi
+                assert region[0] <= x <= region[2] and region[1] <= y <= region[3], (shot, region)
+            proposed += len(detected["shots"])
+        filled = client.post(f"/api/groups/{group.id}/fill-shortfall").json()
+        for shot in filled["shots"]:
+            x, y = shot["x_in"] * sc.ppi, shot["y_in"] * sc.ppi
+            assert regions[-1][0] <= x <= regions[-1][2], (shot, regions[-1])
+        assert proposed > 0
+
     def test_no_holes_gives_no_shots_and_a_by_hand_message(self, client, conn, settings, world):
         group = make_group(conn, world, make_photo(conn, settings), expected=3)
 
@@ -848,8 +878,7 @@ class TestReviewPage:
             'id="shot-counter"',
             'id="finalize-button"',
             'id="detect-button"',
-            'id="fill-button"',
-            'id="aim-button"',
+            'id="aim-confirm-button"',
             'id="delete-button"',
             '<script type="module" src="/static/js/review.js">',
         ):
@@ -885,7 +914,13 @@ class TestReviewPage:
         assert good["return_to"] == "/zeroing/4" and good["next_url"] == "/zeroing/4"
         for bad in ("//evil.example/x", "https://evil.example", "/\\evil.example", "/a\tb", "evil"):
             state = state_for(bad)
-            assert state["return_to"] is None and state["next_url"] == f"/groups/{group.id}", bad
+            assert (
+                state["return_to"] is None and state["next_url"] == f"/groups/{group.id}?share=1"
+            ), bad
+        rifle = state_for("/rifles/1")
+        assert (
+            rifle["return_to"] == "/rifles/1" and rifle["next_url"] == f"/groups/{group.id}?share=1"
+        )
         response = client.get(f"/groups/{group.id}/review", params={"return_to": "//evil.example"})
         assert "evil" not in response.text
         assert 'id="back-link"' not in response.text
@@ -1020,8 +1055,12 @@ class TestChangeScaleReferenceState:
 
         text = client.get(f"/groups/{group.id}/review").text
 
+        # Go back sits in the aim step's bottom row, beside Confirm aim point.
         assert text.index('id="reference-change-button"') < text.index('id="shot-counter"')
-        assert "Change scale reference" in text
+        assert text.index('id="step-aim"') < text.index('id="reference-change-button"')
+        assert text.index('id="reference-change-button"') < text.index('id="aim-confirm-button"')
+        assert text.index('id="reference-change-button"') < text.index('id="step-shots"')
+        assert ">Go back</button>" in text
         for element in (
             'id="reference-change-confirm"',
             'id="reference-change-continue"',
@@ -1059,8 +1098,6 @@ class TestScriptContract:
         assert {(m, re.sub(r"\$\{[^}]*\}", "{id}", path)) for m, path in calls} == {
             ("PUT", "/api/groups/{id}/review"),
             ("POST", "/api/groups/{id}/detect"),
-            ("POST", "/api/groups/{id}/fill-shortfall"),
-            ("POST", "/api/photos/{id}/snap-aim"),
             ("POST", "/api/groups/{id}/finalize"),
             ("POST", "/api/photos/{id}/reference/reset"),
         }
@@ -1172,7 +1209,6 @@ class TestZoomPanStatic:
             'id="zoom-in-button"',
             'id="zoom-out-button"',
             'id="zoom-fit-button"',
-            'id="zoom-region-button"',
             'id="zoom-level"',
             'class="editor-wrap review-editor"',
         ):
@@ -1222,7 +1258,9 @@ def browser_page(tmp_path):
             connection.close()
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
+            page = browser.new_page(
+                viewport={"width": 1400, "height": 1000}, reduced_motion="reduce"
+            )
             problems: list[str] = []
             page.on("pageerror", lambda error: problems.append(str(error)))
             page.on(
@@ -1268,10 +1306,8 @@ class TestZoomPanInARealBrowser:
         page.click("#zoom-fit-button")
         full = self._view(page)
         assert (full["x"], full["y"], full["w"], full["h"]) == (0, 0, sc.width, sc.height)
-        page.click("#zoom-region-button")
-        again = self._view(page)
-        assert again["w"] == pytest.approx(start["w"]) and again["x"] == pytest.approx(start["x"])
         page.click("#zoom-in-button")
+        again = full
         assert self._view(page)["w"] == pytest.approx(again["w"] / 1.5)
         page.click("#zoom-out-button")
         assert self._view(page)["w"] == pytest.approx(again["w"])
@@ -1301,7 +1337,6 @@ class TestZoomPanInARealBrowser:
 
     def test_dragging_empty_space_pans_without_adding_a_shot(self, browser_page):
         page, _, _, _, _, _ = browser_page
-        page.click("#zoom-region-button")
         page.click("#zoom-in-button")
         before = self._view(page)
         count = page.inner_text("#shot-counter")
@@ -1321,15 +1356,17 @@ class TestZoomPanInARealBrowser:
 
     def test_a_click_on_empty_space_still_adds_a_shot_at_the_clicked_point(self, browser_page):
         page, _, settings, group, sc, _ = browser_page
+        count_before = page.locator("#editor-svg circle.shot").count()
+        # Room for one more shot: none is ever added past the number fired.
+        page.fill("#expected-input", str(count_before + 1))
+        page.dispatch_event("#expected-input", "change")
         page.click("#zoom-in-button")
         view = self._view(page)
-        count_before = page.locator("#editor-svg circle.shot").count()
         target = (view["left"] + 30, view["top"] + view["height"] - 30)
         expected = self._under(view, *target)
 
         page.mouse.click(*target)
-        page.click("#save-button")
-        page.wait_for_selector("#flash:not([hidden])")
+        _save(page)
 
         assert page.locator("#editor-svg circle.shot").count() == count_before + 1
         conn = connect(settings.db_path)
@@ -1373,8 +1410,7 @@ class TestZoomPanInARealBrowser:
         page.mouse.down()
         page.mouse.move(target["sx"] + drag_by[0], target["sy"] + drag_by[1], steps=8)
         page.mouse.up()
-        page.click("#save-button")
-        page.wait_for_selector("#flash:not([hidden])")
+        _save(page)
 
         expected = (target["cx"] + drag_by[0] / scale, target["cy"] + drag_by[1] / scale)
         conn = connect(settings.db_path)
@@ -1458,7 +1494,6 @@ class TestZoomPanInARealBrowser:
 
     def test_panning_never_leaves_the_photo(self, browser_page):
         page, _, _, _, sc, _ = browser_page
-        page.click("#zoom-region-button")
         view = self._view(page)
         for dx, dy in ((4000, 4000), (-4000, -4000), (4000, -4000)):
             page.mouse.move(view["left"] + 30, view["top"] + 30)
@@ -1489,11 +1524,17 @@ class TestZoomPanInARealBrowser:
         assert page.is_enabled("#delete-button")
 
 
-def _client_merge(stored: list[dict], proposal: dict, replace_unsaved: bool = False) -> list[dict]:
+def _client_merge(
+    stored: list[dict],
+    proposal: dict,
+    replace_unsaved: bool = False,
+    region_px: tuple[float, float, float, float] | None = None,
+) -> list[dict]:
     """What the page does with a proposal: replace unmoved estimated shots, keep every other.
 
     With `replace_unsaved` (a Detect inside a region) the unsaved, unmoved, non-manual shots of an
-    earlier proposal go too; a stored dict is unsaved unless it carries `saved: True`.
+    earlier proposal go too; a stored dict is unsaved unless it carries `saved: True`. With
+    `region_px` every unmoved, non-manual shot outside the region goes as well, saved or not.
 
     Each kept shot suppresses at most one proposed shot within reach, paired by the optimal
     one-to-one assignment (most pairs first, then least total distance), as in review.js.
@@ -1509,7 +1550,14 @@ def _client_merge(stored: list[dict], proposal: dict, replace_unsaved: bool = Fa
             and s["origin"] != "manual"
         )
 
-    kept = [s for s in stored if not replaceable(s)]
+    def held(s: dict) -> bool:
+        if region_px is None or s["origin"] == "manual" or s.get("moved_by_user", False):
+            return True
+        ppi = proposal["frame"]["ppi"]
+        x0, y0, x1, y1 = region_px
+        return x0 <= s["x_in"] * ppi <= x1 and y0 <= s["y_in"] * ppi <= y1
+
+    kept = [s for s in stored if not replaceable(s) and held(s)]
     reach = proposal["bullet_diameter_in"]
     candidates = [
         {
@@ -1520,6 +1568,7 @@ def _client_merge(stored: list[dict], proposal: dict, replace_unsaved: bool = Fa
             "confidence": p["confidence"],
         }
         for p in proposal["shots"]
+        if held({**p, "moved_by_user": False})
     ]
     distance = np.array(
         [
@@ -1723,7 +1772,7 @@ class TestPlaceholderScript:
             "const replaceable = (s) => isPlaceholder(s) || "
             "(replaceUnsavedProposals && isUnsavedProposal(s));"
         ) in source
-        assert "model.shots.filter((s) => !replaceable(s))" in source
+        assert "model.shots.filter((s) => !replaceable(s) && inRegionOrUserPlaced(s))" in source
         assert "isPlaceholder(shot) &&" in source
 
     @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
@@ -1796,19 +1845,20 @@ class TestReview21FlowInARealBrowser:
 
     @staticmethod
     def _fill(page) -> None:
-        page.click("#fill-button")
-        page.locator("#fill-button:enabled").wait_for()
+        # Detect re-runs with the saved count and region, placing estimated shots in ragged holes
+        # (what the removed Fill shortfall button did).
+        page.click("#detect-button")
+        page.locator("#detect-button:enabled").wait_for()
 
     @staticmethod
     def _save(page) -> None:
-        page.click("#save-button")
-        page.locator("#save-button:enabled").wait_for()
+        _save(page)
 
     def _set_expected(self, page, value: int) -> None:
         page.fill("#expected-input", str(value))
         page.dispatch_event("#expected-input", "change")
 
-    def test_lowering_the_count_and_filling_never_produces_a_409(self, browser_page):
+    def test_lowering_the_count_and_detecting_never_produces_a_409(self, browser_page):
         page, server, settings, group, sc, problems = browser_page
         self._save(page)
         assert self._count(page) == "10 of 10 shots"
@@ -1816,10 +1866,10 @@ class TestReview21FlowInARealBrowser:
         self._set_expected(page, 9)
         self._fill(page)
         assert self._count(page) == "9 of 9 shots"
-        assert page.is_enabled("#finalize-button")
+        assert _ready(page)
 
         self._save(page)
-        assert page.inner_text("#flash") == "Saved."
+        assert _saved_without_error(page)
         page.click("#finalize-button")
         page.click("#finalize-confirm-button")
         page.wait_for_url(f"{server}/groups/{group.id}")
@@ -1846,12 +1896,12 @@ class TestReview21FlowInARealBrowser:
         self._fill(page)
 
         assert self._count(page) == "10 of 9 shots"
-        assert page.is_disabled("#finalize-button")
+        assert not _ready(page)
         assert "remove 1 with Not a bullet hole, or raise the expected count" in page.inner_text(
             "#finalize-reason"
         )
         self._save(page)
-        assert page.inner_text("#flash") == "Saved."
+        assert _saved_without_error(page)
 
         _, shots = self._group_row(settings, group.id)
         moved = next(s for s in shots if s.moved_by_user)
@@ -1868,9 +1918,9 @@ class TestReview21FlowInARealBrowser:
         page.mouse.click(*target)
         page.click("#delete-button")
         page.locator("#shot-counter").filter(has_text="9 of 9 shots").wait_for()
-        assert page.is_enabled("#finalize-button")
+        assert _ready(page)
         self._save(page)
-        assert page.inner_text("#flash") == "Saved."
+        assert _saved_without_error(page)
         page.click("#finalize-button")
         page.click("#finalize-confirm-button")
         page.wait_for_url(f"{server}/groups/{group.id}")
@@ -1894,6 +1944,22 @@ def _estimated_siblings(shots: list[dict]) -> tuple[int, int]:
     return estimated[0], estimated[1]
 
 
+@pytest.fixture
+def cv_v1_for_merged_pairs(request, monkeypatch):
+    """merged_pairs' two estimated siblings come from cv-v1 reading one pair as a ragged hole.
+
+    seg-v1 (the app's detector) finds 11 of the 12 holes directly and leaves one estimate, so these
+    in-process tests pin the scenario to the detector it was built on.
+    """
+    callspec = getattr(request.node, "callspec", None)
+    if callspec is not None and callspec.params.get("name") == "merged_pairs":
+        from rga.vision import detect as cv_v1
+        from rga.vision import pipeline
+
+        monkeypatch.setattr(pipeline, "detect_holes", cv_v1.detect_holes)
+
+
+@pytest.mark.usefixtures("cv_v1_for_merged_pairs")
 class TestFillAfterNudgingASibling:
     """G3c2-W3: a kept (nudged) estimated shot never hides its sibling's re-proposal."""
 
@@ -2239,26 +2305,22 @@ class TestAimCandidatesAvoidShots:
 
 
 class TestAimPageContract:
-    def test_the_page_offers_use_next_and_place_it_yourself_and_never_sets_the_aim_itself(self):
+    def test_the_aim_is_the_circle_center_or_placed_by_hand_with_no_snap(self):
         source = (WEB / "static/js/review.js").read_text()
         markup = (WEB / "templates/review.html").read_text()
 
-        for control in ("aim-use-button", "aim-next-button", "aim-manual-button", "aim-suggestion"):
-            assert f'id="{control}"' in markup
-        assert "Use this aim" in markup and "Next" in markup and "Place it yourself" in markup
-        assert "PRESELECT" not in source
-        assert ".score" not in source
+        # One on/off pair, no "use the center" button.
         assert (
-            "model.suggestionIndex = -1;"
-            in source.split("function suggestAims")[1].split("function useSuggestedAim")[0]
+            'id="aim-center-toggle" aria-pressed="true">Use the circle\'s center</button>' in markup
         )
-        assert "suggestionIndex: -1," in source
-        assert "function useSuggestedAim()" in source
-        assert "suggestAims(proposal.aim_candidates" in source
-        suggest = source[
-            source.index("function suggestAims") : source.index("function useSuggestedAim")
-        ]
-        assert "model.aim =" not in suggest
+        assert 'id="aim-hand-toggle" aria-pressed="false">Mark it by hand</button>' in markup
+        for gone in ("aim-center-button", "aim-suggestion", "aim-use-button", "aim-manual-button"):
+            assert f'id="{gone}"' not in markup
+        assert "snap-aim" not in source, "a click never snaps to the printed mark"
+        assert "placeAim({ x_in: xPx / server.frame.ppi, y_in: yPx / server.frame.ppi }" in source
+        assert "const circleCenter = server.reference_center;" in source
+        # The aim is only ever the circle's centre or a hand-placed point (click, drag, restore).
+        assert source.count("model.aim = { ...circleCenter }") == 2
 
     def test_the_editor_draws_labelled_non_interactive_rings(self):
         editor = (WEB / "static/js/svg_editor.js").read_text()
@@ -2304,7 +2366,9 @@ def _live_review(
             connection.close()
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
+            page = browser.new_page(
+                viewport={"width": 1400, "height": 1000}, reduced_motion="reduce"
+            )
             problems: list[str] = []
             page.on("pageerror", lambda error: problems.append(str(error)))
             page.on(
@@ -2314,26 +2378,33 @@ def _live_review(
             if before_load is not None:
                 before_load(page)
             page.goto(f"{server}/groups/{group.id}/review")
-            page.locator("#editor-svg circle.shot").nth(expected_shots - 1).wait_for()
+            if with_aim:
+                page.locator("#editor-svg circle.shot").nth(expected_shots - 1).wait_for()
+            else:
+                page.locator('#editor-wrap[aria-busy="false"]').wait_for()
             yield page, server, settings, group, sc, problems
         finally:
             browser.close()
 
 
-def _scale_detect_scores(top_score: float):
-    """A `before_load` hook that rewrites the detect response so the best aim scores `top_score`."""
+def _save(page) -> None:
+    """Press Done (it always saves), wait for the save, and decline the lock offer if shown."""
+    with page.expect_response(re.compile(r"/api/groups/\d+/review$")):
+        page.click("#finalize-button")
+    page.locator("#finalize-button:enabled").wait_for()
+    if page.locator("#finalize-confirm").is_visible():
+        page.click("#finalize-cancel-button")
 
-    def hook(page):
-        def handler(route):
-            response = route.fetch()
-            body = response.json()
-            for rank, candidate in enumerate(body["aim_candidates"]):
-                candidate["score"] = max(0.0, top_score - 0.05 * rank)
-            route.fulfill(response=response, json=body)
 
-        page.route("**/api/groups/*/detect", handler)
+def _saved_without_error(page) -> bool:
+    """After Done: no error was shown (it either says what is left, or offered to lock)."""
+    flash = page.inner_text("#flash").strip() if page.is_visible("#flash") else ""
+    return flash == "" or flash.startswith("Saved.")
 
-    return hook
+
+def _ready(page) -> bool:
+    """True when Done would finish the group (nothing blocks finalizing)."""
+    return page.inner_text("#finalize-reason").strip() == ""
 
 
 def _group_after(settings: Settings, group_id: int):
@@ -2348,155 +2419,151 @@ def _group_after(settings: Settings, group_id: int):
 
 @pytest.mark.e2e
 @pytest.mark.skipif(not _playwright_ready(), reason="Playwright browsers are not installed")
-class TestAimSuggestionsInARealBrowser:
-    """UF2 in real Chromium: rings with labels, Use / Next / Place it yourself, nothing automatic."""
+class TestAimStepInARealBrowser:
+    """The aim step in real Chromium: no detect and no shots; the aim starts on the circle's
+    center (unsaved), "Mark it by hand" or a click places it exactly (no snap)."""
 
-    def test_no_ring_is_preselected_and_the_aim_is_set_only_by_clicking_a_ring_then_use(self):
-        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
+    def _aim(self, page) -> tuple[float, float]:
+        mark = page.locator("#editor-svg circle.aim-mark")
+        return float(mark.get_attribute("cx")), float(mark.get_attribute("cy"))
+
+    def _client(self, page, x: float, y: float) -> tuple[float, float]:
+        page.click("#zoom-fit-button")
+        view = page.evaluate(
+            """() => {
+              const svg = document.getElementById('editor-svg');
+              const [x, y, w, h] = svg.getAttribute('viewBox').split(' ').map(Number);
+              const r = svg.getBoundingClientRect();
+              return {x, y, w, h, left: r.left, top: r.top, width: r.width, height: r.height};
+            }"""
+        )
+        return (
+            view["left"] + (x - view["x"]) / view["w"] * view["width"],
+            view["top"] + (y - view["y"]) / view["h"] * view["height"],
+        )
+
+    def test_the_aim_starts_on_the_circle_center_unsaved_and_nothing_is_detected(self):
+        posts: list[str] = []
+
+        def watch(page):
+            page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+
+        with _live_review("ragged_10x7", with_aim=False, expected_shots=10, before_load=watch) as (
             page,
             _server,
             settings,
             group,
-            sc,
+            _sc,
             problems,
         ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            assert "none selected" in page.inner_text("#aim-suggestion-text")
-            assert page.locator("#editor-svg circle.aim-candidate").count() == 1
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 0
-            assert (
-                "1 paster center"
-                in page.locator("#editor-svg text.aim-candidate-label").text_content()
+            state = json.loads(page.locator("#review-root").get_attribute("data-state"))
+            center = state["reference_center"]
+            ppi = state["frame"]["ppi"]
+            assert page.is_visible("#step-aim") and page.locator("#step-shots").is_hidden()
+            assert posts == [], "the aim step runs no detection"
+            assert page.locator("#editor-svg circle.shot").count() == 0
+            assert page.get_attribute("#aim-center-toggle", "aria-pressed") == "true"
+            assert page.get_attribute("#aim-hand-toggle", "aria-pressed") == "false"
+            assert page.locator("#editor-svg circle.aim-candidate").count() == 0
+            assert self._aim(page) == pytest.approx(
+                (center["x_in"] * ppi, center["y_in"] * ppi), abs=1e-6
             )
-            assert page.is_disabled("#aim-use-button") and page.is_enabled("#aim-next-button")
-            assert page.inner_text("#aim-status") == "Aim point is not set."
-            assert page.is_disabled("#finalize-button")
-            assert _group_after(settings, group.id)[0].aim_x_in is None
-            shots_before = page.locator("#editor-svg circle.shot").count()
+            assert page.inner_text("#aim-status") == "Aim point: the circle's exact center."
+            assert page.is_enabled("#aim-confirm-button")
+            assert _group_after(settings, group.id)[0].aim_x_in is None, "not saved before confirm"
 
-            ring = page.locator("#editor-svg circle.aim-candidate").bounding_box()
-            page.mouse.click(ring["x"] + ring["width"] / 2, ring["y"] + ring["height"] / 2)
-
-            assert "Suggested aim 1 of 1: paster center" in page.inner_text("#aim-suggestion-text")
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 1
-            assert page.locator("#editor-svg circle.shot").count() == shots_before
-            assert page.is_enabled("#aim-use-button")
-            assert page.inner_text("#aim-status") == "Aim point is not set."
-            assert _group_after(settings, group.id)[0].aim_x_in is None
-
-            page.click("#aim-use-button")
-
-            assert page.locator("#aim-suggestion").is_hidden()
-            assert page.locator("#editor-svg circle.aim-candidate").count() == 0
-            assert page.inner_text("#aim-status") == "Aim point is set."
-            assert page.is_enabled("#finalize-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
+            page.click("#aim-confirm-button")
+            page.locator("#editor-svg circle.shot").nth(9).wait_for()
             row, _ = _group_after(settings, group.id)
-            assert math.dist((row.aim_x_in, row.aim_y_in), _true_aim_in(sc)) < 0.03
+            assert (row.aim_x_in, row.aim_y_in) == pytest.approx(
+                (center["x_in"], center["y_in"]), abs=1e-9
+            )
             assert problems == []
 
-    def test_next_alone_selects_a_ring_and_use_then_sets_the_aim(self):
-        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
-            page,
-            _server,
-            settings,
-            group,
-            sc,
-            problems,
-        ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            assert page.is_disabled("#aim-use-button")
-
-            page.click("#aim-next-button")
-
-            assert page.is_enabled("#aim-use-button")
-            page.click("#aim-use-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-            row, _ = _group_after(settings, group.id)
-            assert math.dist((row.aim_x_in, row.aim_y_in), _true_aim_in(sc)) < 0.03
-            assert problems == []
-
-    def test_next_walks_the_rings_and_wraps_and_use_takes_the_one_shown(self):
-        with _live_review("multi_dot_target", with_aim=False, expected_shots=5) as (
-            page,
-            _server,
-            settings,
-            group,
-            sc,
-            problems,
-        ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            assert page.locator("#editor-svg circle.aim-candidate").count() >= 2
-            assert "none selected" in page.inner_text("#aim-suggestion-text")
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 0
-
-            page.click("#aim-next-button")
-            first = page.inner_text("#aim-suggestion-text")
-            assert first.startswith("Suggested aim 1 of ")
-
-            page.click("#aim-next-button")
-            second = page.inner_text("#aim-suggestion-text")
-            assert second.startswith("Suggested aim 2 of ") and second != first
-            active = page.locator("#editor-svg circle.aim-candidate.active")
-            assert active.count() == 1
-
-            total = int(first.split(" of ")[1].split(":")[0])
-            for _ in range(total - 1):
-                page.click("#aim-next-button")
-            assert page.inner_text("#aim-suggestion-text") == first
-
-            page.click("#aim-use-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-            row, _ = _group_after(settings, group.id)
-            assert math.dist((row.aim_x_in, row.aim_y_in), _true_aim_in(sc)) < 0.03
-            assert problems == []
-
-    def test_place_it_yourself_clears_the_rings_and_leaves_manual_marking_to_the_user(self):
-        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
-            page,
-            _server,
-            settings,
-            group,
-            sc,
-            problems,
-        ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-
-            page.click("#aim-manual-button")
-
-            assert page.locator("#aim-suggestion").is_hidden()
-            assert page.locator("#editor-svg circle.aim-candidate").count() == 0
-            assert "Click on the aim mark" in page.inner_text("#editor-hint")
-            assert page.inner_text("#aim-status") == "Aim point is not set."
-            assert _group_after(settings, group.id)[0].aim_x_in is None
-            assert problems == []
-
-    def test_a_manual_aim_click_still_snaps_and_dismisses_the_suggestion(self):
+    def test_mark_it_by_hand_waits_for_a_click_and_the_center_toggle_puts_it_back(self):
         with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
             page,
             _server,
             _settings,
             _group,
-            sc,
+            _sc,
             problems,
         ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            page.click("#aim-button")
-            ring = page.locator("#editor-svg circle.aim-candidate").first.bounding_box()
-            page.mouse.click(ring["x"] + ring["width"] / 2 + 4, ring["y"] + ring["height"] / 2)
-            page.locator("#aim-suggestion[hidden]").wait_for(state="attached")
+            state = json.loads(page.locator("#review-root").get_attribute("data-state"))
+            center = state["reference_center"]
+            ppi = state["frame"]["ppi"]
 
-            assert page.inner_text("#aim-status") == "Aim point is set."
-            assert page.locator("#aim-suggestion").is_hidden()
-            assert page.locator("#editor-svg circle.aim-candidate").count() == 0
-            assert page.is_enabled("#finalize-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-            row, _ = _group_after(_settings, _group.id)
-            assert math.dist((row.aim_x_in, row.aim_y_in), _true_aim_in(sc)) < 0.05
+            page.click("#aim-hand-toggle")
+            assert page.get_attribute("#aim-hand-toggle", "aria-pressed") == "true"
+            assert page.locator("#editor-svg circle.aim-mark").count() == 0
+            assert page.inner_text("#aim-status") == "Click the photo where you aimed."
+            assert page.is_disabled("#aim-confirm-button")
+
+            page.mouse.click(*self._client(page, 150.0, 160.0))
+            placed = self._aim(page)
+            assert page.is_enabled("#aim-confirm-button")
+
+            page.click("#aim-center-toggle")
+            assert self._aim(page) == pytest.approx(
+                (center["x_in"] * ppi, center["y_in"] * ppi), abs=1e-6
+            )
+            page.click("#aim-hand-toggle")
+            assert self._aim(page) == pytest.approx(placed, abs=1e-6), "the hand aim comes back"
+            assert problems == []
+
+    def test_a_click_on_the_photo_in_center_mode_switches_to_by_hand(self):
+        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
+            page,
+            _server,
+            _settings,
+            _group,
+            _sc,
+            problems,
+        ):
+            assert page.get_attribute("#aim-center-toggle", "aria-pressed") == "true"
+            page.mouse.click(*self._client(page, 150.0, 160.0))
+            assert page.get_attribute("#aim-hand-toggle", "aria-pressed") == "true"
+            assert page.inner_text("#aim-status") == "Aim point is set where you clicked."
+            assert problems == []
+
+    def test_a_click_places_the_aim_exactly_there_and_a_drag_moves_it(self):
+        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
+            page,
+            _server,
+            settings,
+            group,
+            _sc,
+            problems,
+        ):
+            snaps: list[str] = []
+            page.on("request", lambda r: snaps.append(r.url) if "snap-aim" in r.url else None)
+            target = (150.0, 160.0)
+
+            page.mouse.click(*self._client(page, *target))
+
+            placed = self._aim(page)
+            per_px = page.evaluate(
+                "() => { const s = document.getElementById('editor-svg'); return Number(s.getAttribute('viewBox').split(' ')[2]) / s.getBoundingClientRect().width; }"
+            )
+            assert placed == pytest.approx(target, abs=per_px)
+            assert page.inner_text("#aim-status") == "Aim point is set where you clicked."
+            sx, sy = self._client(page, *placed)
+            page.mouse.move(sx + 2, sy + 2)
+            page.mouse.down()
+            page.mouse.move(sx + 32, sy + 22, steps=6)
+            page.mouse.up()
+            moved = self._aim(page)
+            assert moved[0] - placed[0] == pytest.approx(30 * per_px, abs=per_px)
+            assert moved[1] - placed[1] == pytest.approx(20 * per_px, abs=per_px)
+
+            page.click("#aim-confirm-button")
+            page.locator("#step-shots").wait_for()
+            row, _ = _group_after(settings, group.id)
+            ppi = json.loads(page.locator("#review-root").get_attribute("data-state"))["frame"][
+                "ppi"
+            ]
+            assert (row.aim_x_in * ppi, row.aim_y_in * ppi) == pytest.approx(moved, abs=0.01)
+            assert snaps == []
             assert problems == []
 
 
@@ -2505,9 +2572,8 @@ class TestAimSuggestionsInARealBrowser:
 class TestSiblingNudgeInARealBrowser:
     """G3c2-W3 in real Chromium: nudge one estimated sibling toward the other, then Fill."""
 
-    @pytest.mark.parametrize(
-        ("name", "expected"), [("merged_pairs", 12), ("close_holes_tight_pair", 8)]
-    )
+    # merged_pairs is API-only now: the live server runs seg-v1, which leaves one estimate there.
+    @pytest.mark.parametrize(("name", "expected"), [("close_holes_tight_pair", 8)])
     def test_fill_after_a_nudge_toward_the_sibling_restores_the_count(self, name, expected):
         with _live_review(name, with_aim=True, expected_shots=expected) as (
             page,
@@ -2532,15 +2598,14 @@ class TestSiblingNudgeInARealBrowser:
             page.mouse.up()
             assert page.locator("#editor-svg circle.shot.estimated").count() == 2
 
-            page.click("#fill-button")
-            page.locator("#fill-button:enabled").wait_for()
+            page.click("#detect-button")
+            page.locator("#detect-button:enabled").wait_for()
 
             assert page.inner_text("#shot-counter") == f"{expected} of {expected} shots"
             assert page.locator("#editor-svg circle.shot.estimated").count() == 2
-            assert page.is_enabled("#finalize-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-            assert page.inner_text("#flash") == "Saved."
+            assert _ready(page)
+            _save(page)
+            assert _saved_without_error(page)
             page.click("#finalize-button")
             page.click("#finalize-confirm-button")
             page.wait_for_url(f"{server}/groups/{group.id}")
@@ -2551,85 +2616,11 @@ class TestSiblingNudgeInARealBrowser:
 
 @pytest.mark.e2e
 @pytest.mark.skipif(not _playwright_ready(), reason="Playwright browsers are not installed")
-class TestNoPreselectionInARealBrowser:
-    """B-58 / T4.0a: whatever the score, no ring is pre-selected; the user clicks a ring or Next."""
-
-    @pytest.mark.parametrize("top_score", [0.99, 0.6, 0.3])
-    def test_no_candidate_is_preselected_at_any_score(self, top_score):
-        with _live_review(
-            "multi_dot_target",
-            with_aim=False,
-            expected_shots=5,
-            before_load=_scale_detect_scores(top_score),
-        ) as (page, _server, settings, group, _sc, problems):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-
-            assert "none selected" in page.inner_text("#aim-suggestion-text")
-            assert page.locator("#editor-svg circle.aim-candidate").count() >= 2
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 0
-            assert page.is_disabled("#aim-use-button")
-            assert page.inner_text("#aim-status") == "Aim point is not set."
-            assert _group_after(settings, group.id)[0].aim_x_in is None
-            assert problems == []
-
-    def test_clicking_the_second_ring_then_use_sets_that_candidates_aim(self):
-        with _live_review(
-            "multi_dot_target",
-            with_aim=False,
-            expected_shots=5,
-            before_load=_scale_detect_scores(0.99),
-        ) as (page, _server, settings, group, _sc, problems):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            page.click("#zoom-fit-button")
-            centres = page.evaluate(
-                """() => [...document.querySelectorAll('#editor-svg circle.aim-candidate')].map((c) => {
-                  const r = c.getBoundingClientRect();
-                  return [r.left + r.width / 2, r.top + r.height / 2,
-                          Number(c.getAttribute('cx')), Number(c.getAttribute('cy'))];
-                })"""
-            )
-            sx, sy, cx, cy = centres[1]
-
-            page.mouse.click(sx, sy)
-
-            assert page.inner_text("#aim-suggestion-text").startswith("Suggested aim 2 of ")
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 1
-            page.click("#aim-use-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-            row, _ = _group_after(settings, group.id)
-            ppi = scene("multi_dot_target").ppi
-            assert math.dist((row.aim_x_in, row.aim_y_in), (cx / ppi, cy / ppi)) < 0.01
-            assert problems == []
-
-    def test_a_click_away_from_every_ring_still_adds_a_shot(self):
-        with _live_review("ragged_10x7", with_aim=False, expected_shots=10) as (
-            page,
-            _server,
-            _settings,
-            _group,
-            _sc,
-            problems,
-        ):
-            page.locator("#aim-suggestion:not([hidden])").wait_for()
-            before = page.locator("#editor-svg circle.shot").count()
-            box = page.locator("#editor-svg").bounding_box()
-
-            page.mouse.click(box["x"] + 30, box["y"] + 30)
-
-            assert page.locator("#editor-svg circle.shot").count() == before + 1
-            assert page.locator("#editor-svg circle.aim-candidate.active").count() == 0
-            assert problems == []
-
-
-@pytest.mark.e2e
-@pytest.mark.skipif(not _playwright_ready(), reason="Playwright browsers are not installed")
 class TestSameDirectionDragInARealBrowser:
     """FG3c.2 / G3c3-W4: drag both estimated siblings the same way, then Fill."""
 
-    @pytest.mark.parametrize(
-        ("name", "expected"), [("merged_pairs", 12), ("close_holes_tight_pair", 8)]
-    )
+    # merged_pairs is API-only now: the live server runs seg-v1, which leaves one estimate there.
+    @pytest.mark.parametrize(("name", "expected"), [("close_holes_tight_pair", 8)])
     def test_fill_after_dragging_both_siblings_the_same_way_keeps_the_count(self, name, expected):
         with _live_review(name, with_aim=True, expected_shots=expected) as (
             page,
@@ -2654,13 +2645,12 @@ class TestSameDirectionDragInARealBrowser:
                 page.mouse.up()
             assert page.locator("#editor-svg circle.shot.estimated").count() == 2
 
-            page.click("#fill-button")
-            page.locator("#fill-button:enabled").wait_for()
+            page.click("#detect-button")
+            page.locator("#detect-button:enabled").wait_for()
 
             assert page.inner_text("#shot-counter") == f"{expected} of {expected} shots"
-            assert page.is_enabled("#finalize-button")
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
+            assert _ready(page)
+            _save(page)
             page.click("#finalize-button")
             page.click("#finalize-confirm-button")
             page.wait_for_url(f"{server}/groups/{group.id}")
@@ -2696,7 +2686,9 @@ class TestRegionDetectReplacesTheWholePhotoGuess:
         assert repo_groups.list_rejections(conn, group.id) == []
         assert client.post(f"/api/groups/{group.id}/finalize").status_code == 200
 
-    def test_saved_moved_and_manual_shots_stay(self, client, conn, settings, world):
+    def test_saved_detected_shots_outside_the_region_go_moved_and_manual_stay(
+        self, client, conn, settings, world
+    ):
         sc, group = self._group(conn, world, settings)
         whole = client.post(f"/api/groups/{group.id}/detect", json={}).json()
         stored = _as_payload(whole["shots"])
@@ -2707,12 +2699,15 @@ class TestRegionDetectReplacesTheWholePhotoGuess:
         outside[1]["moved_by_user"] = True
         outside.append({"x_in": 0.5, "y_in": 0.5, "origin": "manual", "moved_by_user": False})
 
-        merged = _client_merge(stored + [outside[-1]], region, replace_unsaved=True)
+        merged = _client_merge(
+            stored + [outside[-1]], region, replace_unsaved=True, region_px=sc.roi
+        )
 
+        # A saved detected shot outside the region goes; the user's moved and manual shots stay.
         kept = [s for s in merged if (round(s["x_in"], 4), round(s["y_in"], 4)) not in inside]
-        assert len(kept) == 3
-        assert {id(s) for s in kept} == {id(outside[0]), id(outside[1]), id(outside[-1])}
-        assert len(merged) == 5 + 3
+        assert len(kept) == 2
+        assert {id(s) for s in kept} == {id(outside[1]), id(outside[-1])}
+        assert len(merged) == 5 + 2
 
     def test_the_page_script_replaces_unsaved_proposals_only_for_a_region_detect(self):
         source = (WEB / "static/js/review.js").read_text()
@@ -2720,37 +2715,22 @@ class TestRegionDetectReplacesTheWholePhotoGuess:
         assert "function isUnsavedProposal(shot)" in source
         assert 'return !shot.saved && !shot.moved_by_user && shot.origin !== "manual";' in source
         assert "mergeProposal(proposal, model.region !== null, !automatic);" in source
-        assert (
-            'mergeProposal(await apiSend("POST", `/api/groups/${groupId}/fill-shortfall`));'
-            in source
-        )
+        assert "fill-shortfall" not in source, "the page has no Fill shortfall any more"
 
 
-def _drag_region(page, region) -> None:
-    """Draw working-px `region` (x0, y0, x1, y1) with the Set region tool; the editor is at Fit."""
-    page.click("#zoom-fit-button")
-    view = page.evaluate(
-        """() => {
-          const svg = document.getElementById('editor-svg');
-          const [x, y, w, h] = svg.getAttribute('viewBox').split(' ').map(Number);
-          const r = svg.getBoundingClientRect();
-          return {x, y, w, h, left: r.left, top: r.top, width: r.width, height: r.height};
-        }"""
+def _store_region_and_reload(page, server, group, region) -> None:
+    """Give the group a region (working px) the way the editor's Detect stores one, then reopen the
+    editor: there is no region button, so a region on a photo of one group comes from the API."""
+    x0, y0, x1, y1 = region
+    stored = page.context.request.post(
+        f"{server}/api/groups/{group.id}/detect",
+        data={"roi_px": {"x0": x0, "y0": y0, "x1": x1, "y1": y1}},
+        headers={"Origin": str(server)},
     )
-
-    def client(px, py):
-        return (
-            view["left"] + (px - view["x"]) / view["w"] * view["width"],
-            view["top"] + (py - view["y"]) / view["h"] * view["height"],
-        )
-
-    page.click("#region-button")
-    sx, sy = client(region[0], region[1])
-    ex, ey = client(region[2], region[3])
-    page.mouse.move(sx, sy)
-    page.mouse.down()
-    page.mouse.move(ex, ey, steps=8)
-    page.mouse.up()
+    assert stored.status == 200, stored.text()
+    page.reload()
+    page.locator("#editor-svg image").wait_for()
+    page.locator("#detect-button:enabled").wait_for()
 
 
 @pytest.mark.e2e
@@ -2767,16 +2747,16 @@ class TestRegionDetectInARealBrowser:
         return (x0, y0, x1, y1)
 
     def test_a_region_detect_after_the_whole_photo_guess_gives_five_of_five(self):
-        with self._open() as (page, _server, settings, group, sc, problems):
+        with self._open() as (page, server, settings, group, sc, problems):
             page.locator("#shot-counter").filter(has_text="15 of 5 shots").wait_for()
 
-            _drag_region(page, self._region(sc))
+            _store_region_and_reload(page, server, group, self._region(sc))
+            page.locator("#shot-counter").filter(has_text=re.compile(r"^5 of 5 shots$")).wait_for()
             page.click("#detect-button")
             page.locator("#shot-counter").filter(has_text=re.compile(r"^5 of 5 shots$")).wait_for()
 
             assert page.locator("#editor-svg circle.shot").count() == 5
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
+            _save(page)
             connection = connect(settings.db_path)
             try:
                 assert repo_groups.list_rejections(connection, group.id) == []
@@ -2784,11 +2764,11 @@ class TestRegionDetectInARealBrowser:
                 assert repo_groups.get_group(connection, group.id).roi_json
             finally:
                 connection.close()
-            assert page.is_enabled("#finalize-button")
+            assert _ready(page)
             assert problems == []
 
     def test_moved_and_manual_shots_survive_a_region_detect(self):
-        with self._open() as (page, _server, _settings, _group, sc, problems):
+        with self._open() as (page, server, _settings, group, sc, problems):
             page.locator("#shot-counter").filter(has_text="15 of 5 shots").wait_for()
             far = page.evaluate(
                 """() => [...document.querySelectorAll('#editor-svg circle.shot')]
@@ -2816,31 +2796,51 @@ class TestRegionDetectInARealBrowser:
             page.mouse.down()
             page.mouse.move(sx + 12, sy + 12, steps=4)
             page.mouse.up()
+            # Room for one more shot than the 15 proposed (no shot is ever added past the count).
+            page.fill("#expected-input", "16")
+            page.dispatch_event("#expected-input", "change")
             # The dragged shot is selected, so the first empty click only deselects it.
             page.mouse.click(*client(150, 150))
             assert page.locator("#editor-svg circle.shot.selected").count() == 0
             assert page.locator("#editor-svg circle.shot.manual").count() == 0
             page.mouse.click(*client(150, 150))
             assert page.locator("#editor-svg circle.shot.manual").count() == 1
+            _save(page)
 
-            _drag_region(page, self._region(sc))
-            page.click("#detect-button")
-            page.locator("#shot-counter").filter(has_text="7 of 5 shots").wait_for()
-
-            assert page.locator("#editor-svg circle.shot.manual").count() == 1
-            assert page.locator("#editor-svg circle.shot").count() == 7
-            assert problems == []
-
-    def test_saved_shots_survive_a_region_detect(self):
-        with self._open() as (page, _server, _settings, _group, sc, problems):
-            page.locator("#shot-counter").filter(has_text="15 of 5 shots").wait_for()
-            page.click("#save-button")
-            page.locator("#save-button:enabled").wait_for()
-
-            _drag_region(page, self._region(sc))
+            _store_region_and_reload(page, server, group, self._region(sc))
             page.click("#detect-button")
             page.locator("#detect-button:enabled").wait_for()
 
+            # The hand-placed shot and the dragged one stay, wherever they are; no unmoved detected
+            # shot outside the region is left. (Detect also tops the count up with estimated shots
+            # inside the region, since 16 were declared.)
+            x0, y0, x1, y1 = self._region(sc)
+            drawn = page.evaluate(
+                """() => [...document.querySelectorAll('#editor-svg circle.shot')].map((c) => (
+                  {cls: c.getAttribute('class'), x: Number(c.getAttribute('cx')), y: Number(c.getAttribute('cy'))}))"""
+            )
+            assert sum("manual" in d["cls"] for d in drawn) == 1
+            assert any(abs(d["x"] - far["x"] - 12 / view["width"] * view["w"]) < 3 for d in drawn)
+            outside = [
+                d
+                for d in drawn
+                if "detected" in d["cls"] and not (x0 <= d["x"] <= x1 and y0 <= d["y"] <= y1)
+            ]
+            assert len(outside) == 1, outside  # only the dragged shot
+            assert problems == []
+
+    def test_saved_detected_shots_outside_the_region_are_dropped(self):
+        with self._open() as (page, server, _settings, group, sc, problems):
+            page.locator("#shot-counter").filter(has_text="15 of 5 shots").wait_for()
+            _save(page)
+
+            _store_region_and_reload(page, server, group, self._region(sc))
+            assert page.inner_text("#shot-counter") == "15 of 5 shots"
+            page.click("#detect-button")
+            page.locator("#detect-button:enabled").wait_for()
+
+            assert page.inner_text("#shot-counter") == "5 of 5 shots"
+            page.click("#undo-button")
             assert page.inner_text("#shot-counter") == "15 of 5 shots"
             assert problems == []
 
@@ -2897,7 +2897,9 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
+                page = browser.new_page(
+                    viewport={"width": 1400, "height": 1000}, reduced_motion="reduce"
+                )
                 problems: list[str] = []
                 page.on("pageerror", lambda error: problems.append(str(error)))
                 photo_id, truth = _upload_confirmed(page, str(server), "wrong")
@@ -2926,12 +2928,13 @@ class TestChangeScaleReferenceInARealBrowser:
                 assert put.status == 200, put.text()
 
                 page.goto(f"{server}/groups/{group.id}/review?return_to=%2Frifles")
+                # The aim is saved, so the page opens on the shots step; Go back reaches the aim
+                # step, whose Go back returns to the reference.
+                page.locator("#shots-back-button").click()
                 button = page.locator("#reference-change-button")
                 button.wait_for()
-                assert button.inner_text() == "Change scale reference"
-                button_box = button.bounding_box()
-                counter_box = page.locator("#shot-counter").bounding_box()
-                assert button_box["y"] + button_box["height"] <= counter_box["y"]
+                assert button.inner_text() == "Go back"
+                assert page.locator("#step-shots").is_hidden()
                 assert page.locator("#reference-change-confirm").is_hidden()
 
                 button.click()
@@ -2968,8 +2971,9 @@ class TestChangeScaleReferenceInARealBrowser:
                 )
                 target = truth["reference"]["ellipse_center_px"]
                 best = min(range(len(centres)), key=lambda i: math.dist(centres[i], target))
-                page.locator('#candidates input[name="candidate"]').nth(best).check()
-                page.locator("#confirm-candidate").click()
+                if len(centres) > 1:
+                    page.locator('#candidates input[name="candidate"]').nth(best).check()
+                page.locator("#reference-next").click()
                 page.wait_for_url(re.compile(rf"/groups/{group.id}/review"))
                 page.locator("#reference-change-button").wait_for()
                 assert parse_qs(urlparse(page.url).query)["return_to"] == ["/rifles"]
@@ -2990,7 +2994,9 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
+                page = browser.new_page(
+                    viewport={"width": 1400, "height": 1000}, reduced_motion="reduce"
+                )
                 photo_id, _ = _upload_confirmed(page, str(server), "right")
                 connection = connect(settings.db_path)
                 try:
@@ -3002,9 +3008,22 @@ class TestChangeScaleReferenceInARealBrowser:
                         offsets=[Offset(0.1, 0.1), Offset(-0.1, 0.0), Offset(0.0, -0.1)],
                         photo=photo_id,
                     )
+                    draft = make_group(
+                        connection,
+                        World(rifle, seed_load(connection, rifle), seed_context(rifle)),
+                        photo_id,
+                        expected=3,
+                        aim=None,
+                    )
                 finally:
                     connection.close()
+                # The final group itself has no aim step; a draft sharing its photo shows the
+                # Go back button disabled.
                 page.goto(f"{server}/groups/{group.id}/review")
+                page.locator("#editor-svg image").wait_for()
+                assert page.locator("#step-aim").is_hidden()
+                assert page.locator("#shots-back-button").is_hidden()
+                page.goto(f"{server}/groups/{draft.id}/review")
                 button = page.locator("#reference-change-button")
                 button.wait_for()
                 assert button.is_disabled()
@@ -3024,7 +3043,9 @@ class TestChangeScaleReferenceInARealBrowser:
             settings = Settings(data_dir=server.data_dir, port=server.port)
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": 1400, "height": 1000}, reduced_motion="reduce")
+                page = browser.new_page(
+                    viewport={"width": 1400, "height": 1000}, reduced_motion="reduce"
+                )
                 requests: list[str] = []
                 page.on("request", lambda r: requests.append(f"{r.method} {r.url}"))
                 photo_id, _ = _upload_confirmed(page, str(server), "right")
@@ -3056,3 +3077,55 @@ class TestChangeScaleReferenceInARealBrowser:
 
         assert photo.reference_confirmed == 1
         assert not [r for r in requests if r.startswith("POST") and "/reference/reset" in r]
+
+
+@pytest.mark.e2e
+@pytest.mark.skipif(not _playwright_ready(), reason="Playwright browsers are not installed")
+@pytest.mark.parametrize("size", [(1280, 800), (1440, 900)])
+def test_on_a_desktop_screen_every_step_fits_without_scrolling(size):
+    """The reference, aim and shots steps fit the window: the photo is sized to the window's
+    height and the controls (with the detect messages and the mouse help) sit in the panel
+    beside it."""
+    width, height = size
+
+    def resize(page):
+        page.set_viewport_size({"width": width, "height": height})
+
+    def fits(page) -> bool:
+        return page.evaluate("() => document.documentElement.scrollHeight") <= height
+
+    with _live_review("ragged_10x7", with_aim=False, expected_shots=10, before_load=resize) as (
+        page,
+        server,
+        _settings,
+        group,
+        _sc,
+        problems,
+    ):
+        assert page.is_visible("#step-aim") and fits(page), "aim step"
+        photo = page.locator("#editor-wrap").bounding_box()
+        panel = page.locator("aside.flow-panel").bounding_box()
+        assert photo["y"] + photo["height"] <= height
+        assert panel["x"] >= photo["x"] + photo["width"], "the controls sit beside the photo"
+        assert page.locator("aside.flow-panel #editor-hint").count() == 1
+        # Scaled to fit without letterboxing: the drawing keeps the photo's shape exactly.
+        box_ratio, view_ratio = page.evaluate(
+            """() => { const s = document.getElementById('editor-svg');
+              const r = s.getBoundingClientRect(); const v = s.viewBox.baseVal;
+              return [r.width / r.height, v.width / v.height]; }"""
+        )
+        assert box_ratio == pytest.approx(view_ratio, rel=0.01)
+
+        page.click("#aim-confirm-button")
+        page.locator("#editor-svg circle.shot").nth(9).wait_for()
+        assert page.locator("aside.flow-panel #review-notices").inner_text().strip() != ""
+        assert fits(page), "shots step, with the detect message shown"
+
+        state = json.loads(page.locator("#review-root").get_attribute("data-state"))
+        page.goto(f"{server}/photos/{state['photo_id']}/reference?group_id={group.id}")
+        page.locator("#photo").wait_for()
+        assert fits(page), "reference step"
+        page.click("#manual-toggle")
+        assert fits(page), "reference step, marking by hand"
+        # The fixture photo has no stored original, so the reference page's full image is a 409.
+        assert [p for p in problems if "409" not in p] == []

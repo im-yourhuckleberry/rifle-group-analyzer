@@ -10,6 +10,7 @@ import pytest
 
 from rga.domain.types import CircleCandidate, ReferenceKind, ReferenceResult
 from rga.vision.reference_circle import (
+    CIRCLE_KINDS,
     _Ellipse,
     _fit_rays,
     _outer_first,
@@ -226,6 +227,8 @@ def test_reference_from_circle_scales_the_circle_to_its_printed_diameter() -> No
     [
         (ReferenceKind.CIRCLE_1IN, 1.0),
         (ReferenceKind.CIRCLE_1_5IN, 1.5),
+        (ReferenceKind.CIRCLE_2IN, 2.0),
+        (ReferenceKind.CIRCLE_2_5IN, 2.5),
         (ReferenceKind.CIRCLE_3IN, 3.0),
     ],
 )
@@ -356,6 +359,44 @@ def test_an_orange_disc_on_corrugated_cardboard_is_found() -> None:
     assert all(mean_diameter(x) > 100 for x in candidates)
 
 
+def test_a_sticker_whose_edge_is_shot_away_is_still_found() -> None:
+    """A group shot out the middle and broke through the rim: the orange fills ~70 % of its outline."""
+    center, diameter = (700.4, 520.3), 380.0
+    canvas = _cardboard().disc(center, diameter, (30, 120, 235))
+    canvas.diamond(center, 70.0, BLACK)
+    holes = ((190, 0.25, 110), (225, 0.22, 110), (255, 0.25, 100), (215, 0.42, 70), (300, 0.47, 40))
+    for angle, reach, size in holes + ((150, 0.3, 90),):
+        a = math.radians(angle)
+        hole = (center[0] + reach * diameter * math.cos(a), center[1] - reach * diameter * math.sin(a))
+        canvas.disc(hole, size + 10, (60, 60, 70)).disc(hole, size, (175, 178, 182))
+    img = canvas.render(noise=5.0, blur=1.2, jpeg=85, seed=4)
+    c = nearest(find_circle_candidates(img, ReferenceKind.CIRCLE_3IN), center)
+    assert math.dist(c.center_px, center) < 2.0
+    assert abs(mean_diameter(c) - diameter) <= 0.01 * diameter
+
+
+def _torn_sticker(center, diameter) -> np.ndarray:
+    """A string of shots tore right across the sticker: the orange is in two pieces, plus a hole."""
+    canvas = _cardboard().disc(center, diameter, (30, 120, 235))
+    backing = (175, 178, 182)
+    for k in range(9):
+        x = center[0] - 0.62 * diameter + k * 0.155 * diameter
+        y = center[1] + 0.25 * diameter - k * 0.06 * diameter
+        canvas.disc((x, y), 0.2 * diameter + 10, (60, 60, 70)).disc((x, y), 0.2 * diameter, backing)
+    hole = (center[0] - 0.2 * diameter, center[1] - 0.28 * diameter)
+    canvas.disc(hole, 0.19 * diameter + 10, (60, 60, 70)).disc(hole, 0.19 * diameter, backing)
+    return canvas.render(noise=5.0, blur=1.2, jpeg=85, seed=4)
+
+
+def test_a_sticker_torn_in_two_is_found_before_the_hole_inside_it() -> None:
+    center, diameter = (700.4, 520.3), 380.0
+    found = find_circle_candidates(_torn_sticker(center, diameter), ReferenceKind.CIRCLE_3IN)
+    assert found
+    c = found[0]
+    assert math.dist(c.center_px, center) < 2.0
+    assert abs(mean_diameter(c) - diameter) <= 0.01 * diameter
+
+
 def test_a_disc_with_a_diamond_inside_never_proposes_the_diamond() -> None:
     center = (500.0, 400.0)
     img = Canvas(1000, 800).disc(center, 360.0, ORANGE).diamond(center, 150.0, BLACK).render()
@@ -367,7 +408,7 @@ def test_a_disc_with_a_diamond_inside_never_proposes_the_diamond() -> None:
 @pytest.mark.parametrize("angle", [0.0, 17.0, 45.0])
 def test_a_printed_diamond_is_not_a_circle(angle: float) -> None:
     img = Canvas(1000, 800).diamond((500.0, 400.0), 220.0, BLACK, angle).render()
-    for kind in (ReferenceKind.CIRCLE_1IN, ReferenceKind.CIRCLE_1_5IN, ReferenceKind.CIRCLE_3IN):
+    for kind in CIRCLE_KINDS:
         assert find_circle_candidates(img, kind) == []
 
 
@@ -450,7 +491,10 @@ def test_candidates_are_ranked_by_score_and_capped() -> None:
     img = canvas.render()
     everything = find_circle_candidates(img, ReferenceKind.CIRCLE_1IN, max_candidates=10)
     assert len(everything) == 4
-    assert [c.score for c in everything] == sorted((c.score for c in everything), reverse=True)
+    # the orange sticker first (the user's rule: orange is nearly always the reference), then score
+    assert math.dist(everything[0].center_px, (800.0, 300.0)) < 1.0
+    rest = [c.score for c in everything[1:]]
+    assert rest == sorted(rest, reverse=True)
     assert find_circle_candidates(img, ReferenceKind.CIRCLE_1IN, max_candidates=2) == everything[:2]
     assert len(find_circle_candidates(img, ReferenceKind.CIRCLE_1IN)) == 4
     assert all(isinstance(c, CircleCandidate) for c in everything)
@@ -753,7 +797,15 @@ def _paster(center=(450.3, 520.7), outer=400.0, ring=200.0) -> np.ndarray:
     return canvas.render(noise=3.0, blur=1.0, jpeg=90, seed=3)
 
 
-@pytest.mark.parametrize("kind", [ReferenceKind.CIRCLE_1_5IN, ReferenceKind.CIRCLE_3IN])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        ReferenceKind.CIRCLE_1_5IN,
+        ReferenceKind.CIRCLE_2IN,
+        ReferenceKind.CIRCLE_2_5IN,
+        ReferenceKind.CIRCLE_3IN,
+    ],
+)
 def test_a_paster_proposes_its_outer_disc_first_and_the_inner_ring_second(kind) -> None:
     center, outer, ring = (450.3, 520.7), 400.0, 200.0
     found = find_circle_candidates(_paster(center, outer, ring), kind)
@@ -804,6 +856,10 @@ def _grid_with(px_per_inch: float) -> GridCandidate:
         (400.0 / 3.0, ReferenceKind.CIRCLE_1_5IN, 200.0),
         (400.0 / 1.5, ReferenceKind.CIRCLE_1_5IN, 400.0),
         (200.0 / 1.5, ReferenceKind.CIRCLE_1_5IN, 200.0),
+        (400.0 / 2.0, ReferenceKind.CIRCLE_2IN, 400.0),
+        (200.0 / 2.0, ReferenceKind.CIRCLE_2IN, 200.0),
+        (400.0 / 2.5, ReferenceKind.CIRCLE_2_5IN, 400.0),
+        (200.0 / 2.5, ReferenceKind.CIRCLE_2_5IN, 200.0),
     ],
 )
 def test_the_candidate_that_measures_the_kinds_size_in_grid_inches_goes_first(
@@ -827,10 +883,10 @@ def test_no_grid_means_the_unchanged_ranking() -> None:
     )
 
 
-def _slotted_disc(slots: int, slot_deg: float, depth: float = 0.9) -> np.ndarray:
+def _slotted_disc(slots: int, slot_deg: float, depth: float = 0.9, color=BLUE) -> np.ndarray:
     """A disc of diameter 400 with `slots` paper wedges cut from its rim to `1 - depth` of the radius."""
     center, radius = (500.0, 400.0), 200.0
-    canvas = Canvas(1000, 800).disc(center, 2 * radius, ORANGE)
+    canvas = Canvas(1000, 800).disc(center, 2 * radius, color)
     for k in range(slots):
         mid = 2 * math.pi * k / slots
         half = math.radians(slot_deg) / 2
@@ -848,6 +904,32 @@ def _slotted_disc(slots: int, slot_deg: float, depth: float = 0.9) -> np.ndarray
 def test_a_disc_whose_outline_is_mostly_bites_is_not_a_reference() -> None:
     found = find_circle_candidates(_slotted_disc(12, 6.0), ReferenceKind.CIRCLE_3IN)
     assert all(mean_diameter(c) < 300.0 for c in found)
+
+
+def test_an_orange_disc_is_the_reference_even_when_slotted_all_round() -> None:
+    """The user's rule: an orange circle, however broken, is almost always the reference."""
+    found = find_circle_candidates(_slotted_disc(12, 6.0, color=ORANGE), ReferenceKind.CIRCLE_3IN)
+    assert found
+    assert math.dist(found[0].center_px, (500.0, 400.0)) < 2.0
+    assert abs(mean_diameter(found[0]) - 400.0) <= 0.01 * 400.0
+
+
+def test_an_orange_sticker_in_scattered_pieces_on_one_arc_is_found_first() -> None:
+    """Most of the sticker is shot away; what is left are pieces whose outer edges share a circle."""
+    center, diameter = (700.4, 520.3), 380.0
+    canvas = _cardboard().disc(center, diameter, (30, 120, 235))
+    backing = (175, 178, 182)
+    canvas.disc(center, 0.72 * diameter, backing)  # the middle is gone
+    for angle in range(0, 360, 40):  # shots through the remaining ring split it into pieces
+        a = math.radians(angle)
+        hole = (center[0] + 0.45 * diameter * math.cos(a), center[1] + 0.45 * diameter * math.sin(a))
+        canvas.disc(hole, 0.2 * diameter + 10, (60, 60, 70)).disc(hole, 0.2 * diameter, backing)
+    canvas.disc((center[0] + 40, center[1] - 30), 70.0, (60, 60, 70))  # a round dark hole inside
+    img = canvas.render(noise=5.0, blur=1.2, jpeg=85, seed=4)
+    found = find_circle_candidates(img, ReferenceKind.CIRCLE_3IN)
+    assert found
+    assert math.dist(found[0].center_px, center) < 3.0
+    assert abs(mean_diameter(found[0]) - diameter) <= 0.015 * diameter
 
 
 def test_a_disc_with_a_few_thin_slits_is_still_the_reference() -> None:

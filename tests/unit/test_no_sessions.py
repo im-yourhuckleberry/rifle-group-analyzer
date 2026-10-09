@@ -24,6 +24,7 @@ MIGRATIONS = Path("rga") / "db" / "migrations"
 
 FORBIDDEN = re.compile(r"\bsessions?\b|session_id")
 LEGACY = re.compile(r"legacy_session\w*")
+BINARY_SUFFIXES = {".onnx"}  # the seg-v1 hole-detector weights (rga/vision/learned/models)
 
 NAMED_EXCEPTION_FILE = Path("rga") / "domain" / "types.py"
 NAMED_EXCEPTION_LINE = 'SESSION = "session"'
@@ -100,6 +101,11 @@ def scan_source_tree(root: Path = SRC) -> Scan:
         if not path.is_file() or "__pycache__" in relative.parts or relative.suffix == ".pyc":
             continue
         if relative.parts[: len(MIGRATIONS.parts)] == MIGRATIONS.parts:
+            continue
+        if relative.suffix in BINARY_SUFFIXES:  # model weights: scan the raw bytes instead
+            scan.files[relative.suffix] = scan.files.get(relative.suffix, 0) + 1
+            if FORBIDDEN.search(path.read_bytes().decode("latin-1")):
+                scan.violations.append(Violation(str(relative), 0, "binary file says session"))
             continue
         try:
             source = path.read_text(encoding="utf-8")

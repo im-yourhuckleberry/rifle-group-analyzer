@@ -42,31 +42,49 @@ The server refuses to start, exiting with code 2, if the host isn't a loopback a
 
 ## Using it
 
-The tabs across the top are Home, Rifles, Groups, Analysis, Compare loads, Dope and Settings.
+The tabs across the top are Groups (where the app opens), Rifles, Analysis, Compare loads, Dope and
+Settings.
 
 1. **Add a rifle** (Rifles). Give it a name and chambering, for example "T3x" and ".223". Picking a
    known cartridge fills in the bullet diameter. The diameter is a dropdown: 0.224, 0.243, 0.257,
    0.264, 0.277, 0.284, 0.308 or 0.338 in.
 2. **Add a load.** Factory or handload, with a lot code.
-3. **Record a group** from the rifle's page. Set the date and time (read from the photo when it has
-   them), distance, position, suppressor and weather. The form pre-fills from your last group.
-4. **Upload the photo**, then set the **scale reference**: the target grid, or a 1.5" circle. If the
-   scale was wrong, use **Change scale reference** at the top of the review page to redo it.
-5. **Review the shots.** Detected holes are proposed. Add, drag or remove them, and mark the aim
-   point. Overlapping holes in a ragged group can be added as estimated shots.
-6. **Read the results.** The group page shows the shot count, extreme spread (in, MOA, mil), the cone
+3. **Add a new group.** Press **Add new group** at the top right of the Groups tab, pick the rifle
+   and the target photo, and continue to the New group page: set the date and time (read from the
+   photo when it has them), distance, position, suppressor and weather. The form pre-fills from your
+   last group. You can also record a group straight from the rifle's page.
+4. **Set the scale reference**: the target grid, or a printed 1, 1.5, 2, 2.5 or 3 inch circle. The
+   outlines found on the photo are numbered, and the biggest circle starts selected; pick the one on
+   the printed edge, then **Next**.
+5. **Set the aim point.** Only the aim is shown at this step. With a printed circle it starts on the
+   circle's exact center (**Use the circle's center**). Switch to **Mark it by hand**, or just click
+   the photo, to put it exactly where you aimed (it never snaps to the printed mark, which holes
+   often cover); drag it to fine-tune. Then **Confirm aim point**. **Go back** returns to the scale
+   reference.
+6. **Review the shots.** Detected holes are proposed only now. Add, drag or remove them; a shot is
+   never added past the number fired. Overlapping holes in a ragged group get estimated ("est")
+   shots, which you can drag into place. **Detect holes** looks at the whole photo (or the group's
+   region, if it has one); when other groups share the photo, remove their holes with **Not a bullet
+   hole**. **Done** saves; when the group is complete it offers **Lock and finish**, which
+   opens the group's share card (a guided zeroing step returns to the zeroing flow instead).
+   Leaving a group before it is finished (Exit, Cancel or the top bar) asks first; unsaved work is
+   lost.
+7. **Read the results.** The group page shows the shot count, extreme spread (in, MOA, mil), the cone
    of fire, the "Thing-hitter" circle, the mean point of impact and the correction. Zero-check and
    zeroing groups show size only, so the point of impact can't bias the next group.
-7. **Share.** Make a PNG card of the group and pick which overlays to include. The default checkboxes
+8. **Share.** Make a PNG card of the group and pick which overlays to include. The default checkboxes
    are set in Settings → Share.
 
 Other flows:
 
 - **Zeroing** (from a rifle's page): a guided, step-by-step 100-yard zero.
 - **Zero check**: confirm an existing zero.
-- **Groups**: every group you've measured, newest first. Collapsible filters cover rifle, load,
-  distance, date range, position, purpose, status and suppressor.
-- **Analysis**: combined groups across days.
+- **Groups**: every group you've measured, newest first. Hover a row to see its photo. Collapsible
+  filters cover rifle, load, distance, date range, position, purpose, status and suppressor.
+  **Edit** shows a checkbox on each row; **Delete** removes the chosen groups for good (after a
+  confirmation where Cancel is the default), along with any photo no other group uses.
+- **Analysis**: combined groups across days. Only combine groups shot on the same zero; otherwise
+  the combined size and point of impact are not accurate.
 - **Compare loads**: loads side by side.
 - **Dope**: per load, a table of finalized groups that have an elevation recorded, by distance.
 

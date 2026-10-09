@@ -236,6 +236,7 @@ tr.clickable:hover { background: var(--accent-soft); cursor: pointer; }
 }
 .notice.info { border-left-color: var(--accent); background: var(--accent-soft); }
 .notice.danger { border-left-color: var(--danger); background: var(--danger-soft); }
+.notice.warn { border-left-color: var(--warn); background: var(--warn-soft); }
 
 /* Statistics */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
@@ -309,7 +310,6 @@ tr.clickable:hover { background: var(--accent-soft); cursor: pointer; }
 .key-poi line { stroke: var(--poi); stroke-width: 1.25; fill: none; vector-effect: non-scaling-stroke; }
 .key-group circle { stroke: var(--group-color); fill: var(--group-color); fill-opacity: 0.12; stroke-width: 1.25; vector-effect: non-scaling-stroke; }
 .shot-counter { font-size: 1.5rem; line-height: 1.2; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.spread-line { font-weight: 600; font-variant-numeric: tabular-nums; }
 .shot-counter.mismatch { color: var(--warn); }
 .shot-counter.match { color: var(--ok); }
 
@@ -324,3 +324,162 @@ tr.clickable:hover { background: var(--accent-soft); cursor: pointer; }
   .container { padding: 1rem; }
   .site-header { padding: 0.6rem 1rem; }
 }
+
+/* "Add new group": the Groups page header and its dialog. */
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.page-head h1 { margin: 0; }
+.new-group-dialog {
+  width: min(28rem, 92vw);
+  padding: 1.25rem 1.5rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.new-group-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.new-group-dialog h2 { margin-top: 0; }
+
+/* Groups table: a row's photo shows at its right end while the row is hovered or focused, as tall
+   as the row (absolutely placed, so it never changes the row's height). */
+[data-groups-table] .thumb-cell, [data-thumb-table] .thumb-cell { position: relative; width: 4.5rem; min-width: 4.5rem; padding: 0; }
+[data-groups-table] .row-thumb, [data-thumb-table] .row-thumb {
+  position: absolute;
+  top: 0;
+  left: 0.5rem;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  border-radius: 3px;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+[data-groups-table] tr:hover .row-thumb[src],
+[data-groups-table] tr:focus-within .row-thumb[src],
+[data-thumb-table] tr:hover .row-thumb[src],
+[data-thumb-table] tr:focus-within .row-thumb[src],
+[data-thumb-table] tr:has(input[type="checkbox"]:checked) .row-thumb[src] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { [data-groups-table] .row-thumb, [data-thumb-table] .row-thumb { transition: none; } }
+
+/* New group page: the attached photo beside the form. */
+.new-group-photo { flex: 0 1 16rem; }
+.new-group-photo img { display: block; width: 100%; height: auto; border-radius: var(--radius); }
+/* On a desktop screen the reference and review steps fill the window: the steps sit beside the
+   title, the photo takes the left (as wide as the window's height allows, using the `--photo-aspect` its
+   script sets) and the controls a panel right beside it. */
+@media (min-width: 1100px) and (min-height: 640px) {
+  .container:has(> .flow-page) { max-width: 1680px; padding-top: 1rem; padding-bottom: 1rem; }
+  .flow-page { --flow-chrome: 14rem; }
+  .flow-page > .page-head { flex-wrap: nowrap; margin-bottom: 0.75rem; }
+  .flow-page > .page-head h1, .flow-page > .page-head p { margin: 0; }
+  .flow-page > .page-head .stepper { margin: 0 auto 0 1.5rem; }
+  .flow-page .flow-body { flex-wrap: nowrap; }
+  .flow-page .flow-photo { flex: 0 1 calc((100vh - var(--flow-chrome)) * var(--photo-aspect, 1.333)); min-width: 0; }
+  /* The review editor's drawing has a large natural size in the photo's shape (svg_editor.js), so
+     max-width and max-height scale it down to fit and keep its shape. */
+  #review-root .flow-photo { flex: 0 1 auto; }
+  #review-root .flow-photo > .editor-wrap { width: fit-content; max-width: 100%; }
+  #review-root .flow-photo > .editor-wrap svg {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(100vh - var(--flow-chrome));
+  }
+  .flow-page .flow-photo > p { margin: 0.4rem 0 0; }
+  .flow-page .flow-panel {
+    flex: 1 0 24rem;
+    max-width: 40rem;
+    margin-bottom: 0;
+    max-height: calc(100vh - 9.5rem);
+    overflow-y: auto;
+  }
+  .flow-page .flow-panel h2 { margin-top: 0; }
+  .flow-page .flow-panel .editor-hint { font-size: 0.85rem; }
+}
+
+/* On a desktop screen the New group page fills the window instead of a narrow column: the steps
+   sit beside the title, the fields run four to a row and the photo takes the column on the right,
+   sized to the window, so the whole form fits without scrolling. */
+@media (min-width: 1100px) and (min-height: 640px) {
+  .container:has(> .group-new) { max-width: 1680px; padding-top: 1rem; padding-bottom: 1rem; }
+  .group-new > * + * { margin-top: 0.75rem; }
+  .group-new-head { flex-wrap: nowrap; }
+  .group-new-head .stepper { margin: 0 auto 0 1.5rem; }
+  .group-new-head p { margin: 0; }
+  .group-new-body { flex-wrap: nowrap; align-items: stretch; }
+  .group-new-body > .card { margin-bottom: 0; }
+  .group-new #new-group-card > h2,
+  .group-new .new-group-photo > h2 { margin-top: 0; }
+  .group-new #new-group-card .grid-2 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem 1rem; }
+  .group-new #new-group-card .field { margin-bottom: 0.25rem; }
+  .group-new #new-group-card.stack > * + * { margin-top: 0.5rem; }
+  .group-new #weather-panel { margin: 0; padding: 0.5rem 1rem; }
+  .group-new #weather-panel[open] .grid-2 { margin-top: 0.5rem; }
+  .group-new #new-group-card .actions { margin-top: 0.25rem; }
+  /* The suppressor choice and the weather's Skip button sit on one line instead of stacking. */
+  .group-new [data-suppressor-picker],
+  .group-new [data-suppressor-choice]:not([hidden]),
+  .group-new [data-suppressor-new]:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+  .group-new [data-suppressor-picker] > * + *,
+  .group-new [data-suppressor-picker] .stack > * + * { margin-top: 0; }
+  .group-new [data-suppressor-picker] .actions { margin-top: 0; }
+  .group-new #new-group-card .grid-2 > .field:has([data-suppressor-picker]) { grid-column: 1 / -1; }
+  .group-new [data-suppressor-picker] select,
+  .group-new [data-suppressor-picker] input[type="text"] { width: auto; min-width: 14rem; }
+  .group-new #weather-panel > .stack { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 1rem; }
+  .group-new #weather-panel > .stack > * { margin-top: 0; }
+  .group-new #weather-panel > .stack > .grid-2 { flex: 1 1 0; min-width: 0; }
+  .group-new #weather-panel > .stack > .notice { flex-basis: 100%; }
+  .group-new #weather-panel > .stack > .actions { margin-bottom: 0.3rem; }
+  .group-new .new-group-photo { flex: 0 1 34%; display: flex; flex-direction: column; }
+  .group-new .new-group-photo img {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(100vh - 15rem);
+    width: 100%;
+    object-fit: contain;
+    background: var(--bg);
+  }
+}
+
+/* Groups tab Edit mode: a checkbox column, the selection bar and the delete confirmation, where
+   Cancel is the big, easy target and Delete the small, plain one. */
+.page-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+[data-groups-table] .select-cell { display: none; width: 2.5rem; text-align: center; }
+[data-groups-table].is-editing .select-cell { display: table-cell; }
+[data-groups-table].is-editing tr.is-selected { background: var(--accent-soft); }
+.select-cell input { width: 1.15rem; height: 1.15rem; margin: 0; cursor: pointer; }
+.edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.6rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.edit-bar #groups-selected { font-weight: 600; margin-right: auto; }
+.confirm-dialog {
+  width: min(26rem, 92vw);
+  padding: 1.5rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.confirm-dialog h2 { margin-top: 0; }
+.confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1.25rem; }
+.confirm-actions .confirm-cancel { flex: 1 1 12rem; padding: 0.95rem 1.5rem; font-size: 1.15rem; }
+.confirm-actions .confirm-delete {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid transparent;
+  text-decoration: underline;
+}
+.confirm-actions .confirm-delete:hover:not(:disabled) { border-color: var(--danger); text-decoration: none; filter: none; }
+/* Dialogs sit inside `.stack` containers; keep the browser's centring margin. */
+.stack > dialog.new-group-dialog, .stack > dialog.confirm-dialog { margin: auto; }
+
+/* A two-way toggle: one of two options is on, and choosing one turns the other off. */
+.segmented { display: inline-flex; border: 1px solid var(--accent); border-radius: var(--radius); overflow: hidden; }
+.segmented button { border: 0; border-radius: 0; color: var(--accent); background: var(--surface); }
+.segmented button + button { border-left: 1px solid var(--accent); }
+.segmented button[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+.segmented button:active:not(:disabled) { transform: none; }

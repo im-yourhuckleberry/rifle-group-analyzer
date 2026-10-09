@@ -268,8 +268,9 @@ def test_estimated_shots_carry_the_badge_and_other_rows_do_not(client, conn, wor
     est_row = re.search(
         rf'<tr class="clickable" data-group-id="{estimated.id}".*?</tr>', html, re.S
     )[0]
-    assert "includes estimated shots" in est_row
-    assert html.count("includes estimated shots") == 1
+    # The size is shown plainly; there is no "includes estimated shots" wording any more.
+    assert re.search(r"\d+\.\d\d in · \d+\.\d\d MOA · \d+\.\d\d mil", est_row)
+    assert "includes estimated shots" not in html
 
 
 def test_the_notes_snippet_collapses_whitespace_and_is_cut_with_an_ellipsis(client, conn, world):
@@ -644,7 +645,11 @@ def test_user_text_is_escaped_everywhere_on_the_page(client, conn):
 
     assert XSS not in html
     assert html.count("&lt;script&gt;alert(1)&lt;/script&gt;") >= 6
-    assert len(re.findall(r"<script\b", html)) == 1
+    assert re.findall(r"<script\b[^>]*>", html) == [
+        '<script type="module" src="/static/js/groups_list.js">',
+        '<script type="module" src="/static/js/new_group.js">',
+        '<script type="module" src="/static/js/groups_edit.js">',
+    ]
 
 
 def test_group_notes_are_escaped_in_the_snippet(client, conn, world):
@@ -769,14 +774,16 @@ def test_the_groups_link_is_in_the_nav_of_every_page_and_active_only_on_its_own(
     nav = re.search(r"<nav\b.*?</nav>", html, re.S)[0]
     assert '<a href="/groups"' in nav and ">Groups</a>" in nav
     active = '<a href="/groups" class="active" aria-current="page">Groups</a>' in nav
-    assert active == (path == "/groups")
+    # "/" redirects to the Groups tab, the app's starting page.
+    assert active == (path in ("/", "/groups"))
 
 
-def test_the_nav_puts_groups_after_rifles(client):
-    nav = re.search(r"<nav\b.*?</nav>", client.get("/").text, re.S)[0]
+def test_the_nav_starts_with_groups_then_rifles_and_has_no_home_tab(client):
+    nav = re.search(r"<nav\b.*?</nav>", client.get("/groups").text, re.S)[0]
 
     hrefs = re.findall(r'href="([^"]+)"', nav)
-    assert hrefs.index("/groups") == hrefs.index("/rifles") + 1
+    assert hrefs[:2] == ["/groups", "/rifles"]
+    assert "/" not in hrefs and ">Home<" not in nav
 
 
 def test_the_script_is_a_csp_clean_module_that_never_writes(client):
@@ -796,7 +803,12 @@ def test_the_page_has_no_native_post_form_and_one_get_form(client):
     html = get(client)
 
     forms = re.findall(r"<form\b[^>]*>", html)
-    assert forms == ['<form method="get" action="/groups" data-form="group-filters" class="stack">']
+    # The filters are the one native (GET) form; the "Add new group" dialog's form is script-driven
+    # (its submit is prevented and the photo is uploaded through api.js).
+    assert forms == [
+        '<form method="get" action="/groups" data-form="group-filters" class="stack">',
+        '<form id="new-group-form" class="stack" novalidate>',
+    ]
 
 
 def test_the_route_reads_through_services_only():

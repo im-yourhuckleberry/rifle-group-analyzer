@@ -3,7 +3,7 @@
  * The preview is an <img> pointed at `/api/groups/{id}/share.png?layers=...`; checkboxes start from
  * the saved share defaults (embedded in `data-defaults`, set in Settings) each time the card opens,
  * and a layer the group cannot offer stays disabled with the reason the server rendered. Nothing
- * is stored from here.
+ * is stored from here. Opened with `?share=1` (where finalizing a group goes), the card opens itself.
  */
 
 const HIDDEN = "is-hidden";
@@ -63,4 +63,14 @@ export function wireShare() {
       refresh();
     }
   });
+
+  // Finalizing a group lands here with ?share=1: open the card straight away, once.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("share") === "1") {
+    params.delete("share");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    open.click();
+    card.scrollIntoView({ block: "start" });
+  }
 }

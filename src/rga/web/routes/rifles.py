@@ -6,7 +6,6 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict
 from datetime import date
 from typing import Annotated
 
@@ -17,9 +16,9 @@ from rga.domain.types import LoadKind, Position
 from rga.services import group_records as group_service
 from rga.services import rifles as service
 from rga.services import zeroing as zeroing_service
-from rga.services.groups import WEATHER_PROMPT_MIN_YD
 from rga.web.app import ApiError
 from rga.web.deps import get_db
+from rga.web.routes.add_group import form_state
 from rga.web.schemas import (
     ROUTE_SCHEMAS,
     CaliberOut,
@@ -193,23 +192,14 @@ def rifle_page(rifle_id: int, request: Request, conn: Conn) -> HTMLResponse:
         detail = service.rifle_page_data(conn, rifle_id)
         defaults = group_service.group_defaults(conn, rifle_id)
     photos = {photo.id: photo for day in detail.days for photo in day.photos}
-    state = {
-        "rifle_id": rifle_id,
-        "today": date.today().isoformat(),
-        "defaults": asdict(defaults),
-        "weather_prompt_yd": WEATHER_PROMPT_MIN_YD,
-        "lots": {
-            str(entry.load.id): [lot.lot_code for lot in entry.lots] for entry in detail.loads
-        },
-        "photo_confirmed": {
-            str(pid): bool(photo.reference_confirmed) for pid, photo in photos.items()
-        },
-    }
+    confirmed = {str(pid): bool(photo.reference_confirmed) for pid, photo in photos.items()}
+    state = form_state(detail, defaults, None, f"/rifles/{rifle_id}", confirmed)
     context = {
         "active": "rifles",
         "detail": detail,
         "defaults": defaults,
         "state_json": json.dumps(state),
+        "pending_photo": None,
         "position_labels": group_service.POSITION_LABELS,
         "zeros": zeroing_service.list_zeros_for_rifle(conn, rifle_id),
         "zero_states": ZERO_STATE_LABELS,

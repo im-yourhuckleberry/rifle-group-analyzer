@@ -9,11 +9,10 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/">Rifle Group Analyzer</a>
+    <a class="brand" href="/groups">Rifle Group Analyzer</a>
     <nav class="site-nav" aria-label="Main">
-      <a href="/"{% if active == 'home' %} class="active" aria-current="page"{% endif %}>Home</a>
-      <a href="/rifles"{% if active == 'rifles' %} class="active" aria-current="page"{% endif %}>Rifles</a>
       <a href="/groups"{% if active == 'groups' %} class="active" aria-current="page"{% endif %}>Groups</a>
+      <a href="/rifles"{% if active == 'rifles' %} class="active" aria-current="page"{% endif %}>Rifles</a>
       <a href="/analysis"{% if active == 'analysis' %} class="active" aria-current="page"{% endif %}>Analysis</a>
       <a href="/compare"{% if active == 'compare' %} class="active" aria-current="page"{% endif %}>Compare loads</a>
       <a href="/dope"{% if active == 'dope' %} class="active" aria-current="page"{% endif %}>Dope</a>

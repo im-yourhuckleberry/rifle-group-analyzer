@@ -193,6 +193,10 @@ def _clamped_roi(roi: RoiPx, frame: WorkingFrame) -> RoiPx:
     return clamped
 
 
+def _inside(roi: RoiPx, x_px: float, y_px: float) -> bool:
+    return roi[0] <= x_px <= roi[2] and roi[1] <= y_px <= roi[3]
+
+
 def _without_rejected(
     blobs: list[Blob], rejections: list[RejectionRow], frame: WorkingFrame, radius_px: float
 ) -> list[Blob]:
@@ -229,6 +233,17 @@ def _reference_center_px(photo: PhotoRow, frame: WorkingFrame) -> tuple[float, f
     )
     low = plane.min(axis=0)
     return float(-low[0] * frame.ppi), float(-low[1] * frame.ppi)
+
+
+def reference_center_in(view: GroupView) -> tuple[float, float] | None:
+    """Plane-inch centre of the photo's confirmed circle reference (the aim the review page offers
+    as "Use the circle's center"); None for a grid reference or an unconfirmed photo."""
+    if view.photo is None or view.frame is None:
+        return None
+    center = _reference_center_px(view.photo, view.frame)
+    if center is None:
+        return None
+    return center[0] / view.frame.ppi, center[1] / view.frame.ppi
 
 
 def _aim_region(
@@ -318,9 +333,17 @@ def _propose(
     if explicit is not None:
         with _write_transaction(conn):
             repo_groups.update_group(conn, group_id, roi_json=roi_to_json(explicit))
+    placed = shots_from_resolve(resolved, frame)
+    if effective is not None:
+        # Split and estimated centres can fall just outside the region; a region holds them all.
+        placed = [
+            s
+            for s in placed
+            if _inside(effective, s.point.x_in * frame.ppi, s.point.y_in * frame.ppi)
+        ]
     shots = tuple(
         ProposedShot(seq, s.point.x_in, s.point.y_in, s.origin, s.confidence)
-        for seq, s in enumerate(shots_from_resolve(resolved, frame), start=1)
+        for seq, s in enumerate(placed, start=1)
     )
     aims = _aim_candidates(view, working, frame, effective, shots) if with_aims else ()
     return Proposal(resolved.status, resolved.messages, shots, frame, diameter, aims)
@@ -387,6 +410,7 @@ __all__ = [
     "detect",
     "fill_shortfall",
     "group_view",
+    "reference_center_in",
     "roi_from_json",
     "roi_to_json",
     "snap_aim",

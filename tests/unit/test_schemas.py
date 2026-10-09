@@ -68,7 +68,7 @@ def _design_routes() -> set[tuple[str, str]]:
 
 def test_registry_covers_exactly_the_routes_in_design_4_7() -> None:
     design = _design_routes()
-    assert len(design) == 48, "design §4.7 parse looks wrong"
+    assert len(design) == 49, "design §4.7 parse looks wrong"
     assert set(s.ROUTE_SCHEMAS) == design
 
 
@@ -533,7 +533,7 @@ def test_group_update_takes_the_context_fields() -> None:
 def test_reference_propose_accepts_each_kind_and_rejects_others() -> None:
     for kind in dt_types.ReferenceKind:
         assert ok(s.ReferenceProposeRequest, {"kind": kind.value})
-    bad(s.ReferenceProposeRequest, {"kind": "circle_2in"})
+    bad(s.ReferenceProposeRequest, {"kind": "circle_4in"})
 
 
 def test_reference_confirm_by_candidate_index() -> None:

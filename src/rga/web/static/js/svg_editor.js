@@ -14,6 +14,9 @@ const DRAG_THRESHOLD_PX = 4;
 const AIM_ARM_IN = 0.35;
 const CANDIDATE_RING_IN = 0.22;
 const MIN_HIT_PX = 8;
+// A click this many screen pixels outside a shot's circle still picks the shot, at any zoom.
+const EDGE_SLACK_PX = 3;
+const NATURAL_LONG_SIDE = 4000;
 const REGION_PAD = 1.4;
 
 function svgElement(name, attributes = {}) {
@@ -30,10 +33,12 @@ function clamp(value, low, high) {
  * Create the editor on `svg`.
  * Options: imageUrl, ppi, width, height (working px), radiusIn (bullet radius in inches), and the
  * callbacks onAdd(xIn, yIn), onSelect(index|null), onMoveStart(index), onMove(index, xIn, yIn),
- * onAimClick(xPx, yPx), onRegion(x0, y0, x1, y1, done) and onView(zoomLevel).
+ * onAimClick(xPx, yPx), onAimMove(xIn, yIn, done), onRegion(x0, y0, x1, y1, done) and
+ * onView(zoomLevel).
  * A click on empty space deselects when a shot is selected and adds a shot otherwise. A dragged
  * shot keeps the offset from where it was grabbed, so it never jumps under the pointer. In aim mode
- * the click counts on release, and a drag pans instead of placing the aim.
+ * the click counts on release, and a drag pans instead of placing the aim; a drag that starts on
+ * the placed aim mark moves the aim instead (with the same grab offset, and no snap).
  * `render({ shots, selected, aim, region, aimCandidates, activeCandidate })` draws everything;
  * `aimCandidates` are `{ x_in, y_in, label }` suggestions drawn as numbered rings, the one at
  * `activeCandidate` emphasised. Rings never take pointer input.
@@ -57,6 +62,11 @@ export function createEditor(svg, options) {
   const layer = svgElement("g");
   svg.replaceChildren(image, layer);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  // A large natural size in the photo's shape: the page's CSS scales the drawing down to the room
+  // it has (as wide as the column, as tall as the window allows) without changing its shape.
+  const natural = NATURAL_LONG_SIDE / Math.max(width, height);
+  svg.setAttribute("width", String(Math.round(width * natural)));
+  svg.setAttribute("height", String(Math.round(height * natural)));
   const zoom = createZoom(svg, {
     bounds: { x: 0, y: 0, w: width, h: height },
     onView(level) {
@@ -74,8 +84,15 @@ export function createEditor(svg, options) {
     return { x: clamp(mapped.x, 0, width - 1), y: clamp(mapped.y, 0, height - 1) };
   }
 
+  function onAim(point) {
+    if (!state.aim || !options.onAimMove) return false;
+    const reach = Math.max(AIM_ARM_IN * ppi * 0.6, MIN_HIT_PX * 1.5 / pixelsPerUnit());
+    return Math.hypot(state.aim.x_in * ppi - point.x, state.aim.y_in * ppi - point.y) <= reach;
+  }
+
   function shotAt(point) {
-    const reach = Math.max(radiusIn * ppi * 1.15, MIN_HIT_PX / pixelsPerUnit());
+    const radius = radiusIn * ppi;
+    const reach = Math.max(radius * 1.15, radius + EDGE_SLACK_PX / pixelsPerUnit(), MIN_HIT_PX / pixelsPerUnit());
     let best = null;
     let bestDistance = reach;
     state.shots.forEach((shot, index) => {
@@ -151,6 +168,15 @@ export function createEditor(svg, options) {
       drag = { kind: "region", start: point };
       return;
     }
+    if (mode === "aim" && onAim(point)) {
+      drag = {
+        kind: "aim-move",
+        start: point,
+        offset: { x: state.aim.x_in * ppi - point.x, y: state.aim.y_in * ppi - point.y },
+        moved: false,
+      };
+      return;
+    }
     const index = mode === "aim" ? null : shotAt(point);
     if (index === null) {
       drag = {
@@ -185,6 +211,14 @@ export function createEditor(svg, options) {
       return;
     }
     const point = toWorking(event);
+    if (drag.kind === "aim-move") {
+      const travelled = Math.hypot(point.x - drag.start.x, point.y - drag.start.y) * pixelsPerUnit();
+      if (!drag.moved && travelled < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+      svg.classList.add("is-grabbing");
+      moveAim(drag, point, false);
+      return;
+    }
     if (drag.kind === "shot") {
       const travelled = Math.hypot(point.x - drag.start.x, point.y - drag.start.y) * pixelsPerUnit();
       if (!drag.moved && travelled < DRAG_THRESHOLD_PX) return;
@@ -209,6 +243,12 @@ export function createEditor(svg, options) {
     options.onMove(shotDrag.index, x / ppi, y / ppi);
   }
 
+  function moveAim(aimDrag, point, done) {
+    const x = clamp(point.x + aimDrag.offset.x, 0, width - 1);
+    const y = clamp(point.y + aimDrag.offset.y, 0, height - 1);
+    options.onAimMove(x / ppi, y / ppi, done);
+  }
+
   function finish(event) {
     if (!drag) return;
     const point = toWorking(event);
@@ -216,7 +256,10 @@ export function createEditor(svg, options) {
     drag = null;
     svg.classList.remove("is-grabbing");
     if (finished.pan) finished.pan.end();
-    if (finished.kind === "aim") {
+    if (finished.kind === "aim-move") {
+      if (finished.moved) moveAim(finished, point, true);
+      else options.onAimClick(point.x, point.y);
+    } else if (finished.kind === "aim") {
       if (!finished.panning) options.onAimClick(point.x, point.y);
     } else if (finished.kind === "shot" && finished.moved) {
       moveShot(finished, point);

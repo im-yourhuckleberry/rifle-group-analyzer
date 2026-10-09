@@ -55,5 +55,29 @@
   stroke-width: 2px;
   pointer-events: none;
 }
-.aim-suggestion .actions { margin-top: 0.5rem; }
 
+
+/* Review panel layout: tools first, then one navigation row (back on the left, the step's main
+   action on the right). */
+.step-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.step-nav > :only-child,
+.step-nav > [hidden] + * { margin-left: auto; }
+.tool-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.shots-summary { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
+.shots-summary .field { margin: 0; max-width: 8rem; }
+.aim-status { font-weight: 600; }
+button.danger.outline { color: var(--danger); background: var(--surface); border-width: 2px; }
+button.danger.outline:disabled { color: var(--ink-soft); border-color: var(--line); }
+
+/* Messages sit at the top of the controls panel; with none, they take no room. */
+#review-notices:empty { display: none; }
+#review-notices + * { margin-top: 0; }
+#review-notices:not(:empty) + * { margin-top: 0.75rem; }
+#review-root .editor-hint { font-size: 0.85rem; padding-top: 0.5rem; }

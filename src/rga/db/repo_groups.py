@@ -21,6 +21,9 @@ __all__ = [
     "GroupLinkMismatch",
     "NewShot",
     "add_rejection",
+    "delete_groups",
+    "delete_unused_photos",
+    "reference_kind_counts",
     "create_group",
     "create_photo",
     "create_suppressor",
@@ -366,6 +369,48 @@ def create_group(
         ),
     )
     return _inserted(get_group(conn, int(cursor.lastrowid)))
+
+
+def delete_groups(conn: sqlite3.Connection, group_ids: Sequence[int]) -> int:
+    """Delete these groups (their shots, rejections and zero checks go with them by ON DELETE
+    CASCADE) and every saved aggregate that included one of them, since it no longer is the
+    combination that was saved (its stored group count would be wrong); returns how many groups
+    were deleted."""
+    marks = ",".join("?" * len(group_ids))
+    params = tuple(group_ids)
+    conn.execute(
+        "DELETE FROM aggregates WHERE id IN "
+        f"(SELECT aggregate_id FROM aggregate_groups WHERE group_id IN ({marks}))",
+        params,
+    )
+    return conn.execute(f"DELETE FROM groups WHERE id IN ({marks})", params).rowcount
+
+
+def reference_kind_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many groups used each kind of confirmed scale reference (via their photo)."""
+    rows = conn.execute(
+        "SELECT p.reference_kind, COUNT(g.id) FROM groups g JOIN photos p ON p.id = g.photo_id "
+        "WHERE p.reference_confirmed = 1 AND p.reference_kind IS NOT NULL GROUP BY p.reference_kind"
+    ).fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
+def delete_unused_photos(conn: sqlite3.Connection, photo_ids: Sequence[int]) -> list[PhotoRow]:
+    """Delete those of these photos that no group uses any more; returns the deleted rows (so the
+    caller can remove their files)."""
+    if not photo_ids:
+        return []
+    marks = ",".join("?" * len(photo_ids))
+    rows = conn.execute(
+        f"SELECT * FROM photos WHERE id IN ({marks}) "
+        "AND NOT EXISTS (SELECT 1 FROM groups g WHERE g.photo_id = photos.id)",
+        tuple(photo_ids),
+    ).fetchall()
+    unused = [PhotoRow.from_row(row) for row in rows]
+    if unused:
+        gone = ",".join("?" * len(unused))
+        conn.execute(f"DELETE FROM photos WHERE id IN ({gone})", tuple(p.id for p in unused))
+    return unused
 
 
 def get_group(conn: sqlite3.Connection, group_id: int) -> GroupRow | None:

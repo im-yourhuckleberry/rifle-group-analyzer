@@ -1,6 +1,6 @@
 """B-66 R7: the pages without sessions: rifle page groups by day and the Add a group form, the
 dashboard's recent groups, the zeroing group form, the group page header and Context card, and the
-review page's "Draw a region first". HTML checks run in-process; the forms run in Chromium.
+review page detecting a shared photo. HTML checks run in-process; the forms run in Chromium.
 """
 
 from __future__ import annotations
@@ -194,8 +194,10 @@ class TestRiflePage:
 # ----------------------------------------------------------------------------------- dashboard
 
 
-class TestDashboard:
-    def test_recent_groups_list_the_latest_ten_with_a_link_and_no_statistics(self, client, conn):
+class TestStartPage:
+    """The Groups tab replaced the old dashboard: `/` opens it."""
+
+    def test_the_app_opens_on_every_group_newest_first(self, client, conn):
         rifle = seed_rifle(conn, name="Dash rifle")
         load = seed_load(conn, rifle)
         ids = [
@@ -203,18 +205,20 @@ class TestDashboard:
             for day in range(1, 13)
         ]
 
+        response = client.get("/")
+
+        assert response.url.path == "/groups"
+        rows = [
+            int(i)
+            for i in re.findall(r'<tr class="clickable" data-group-id="(\d+)"', response.text)
+        ]
+        assert rows == list(reversed(ids))
+        assert "Dash rifle" in response.text and f'href="/groups/{ids[-1]}"' in response.text
+
+    def test_no_groups_says_so_and_offers_add_new_group(self, client):
         html = client.get("/").text
 
-        rows = [int(i) for i in re.findall(r'<tr data-group-id="(\d+)"', html)]
-        assert rows == list(reversed(ids))[:10]
-        assert "Recent groups" in html and "Dash rifle" in html
-        assert f'href="/groups/{ids[-1]}"' in html
-        assert "09:00" in html and not re.search(r"(?i)\bsessions?\b|MOA|extreme spread", html)
-
-    def test_no_groups_says_so(self, client):
-        html = client.get("/").text
-
-        assert "No groups yet" in html and "Recent groups" in html
+        assert "No groups yet" in html and ">Add new group</button>" in html
 
 
 # ------------------------------------------------------------------------------- group page
@@ -395,11 +399,11 @@ class TestZeroingPage:
 
 
 class TestReviewPage:
-    def test_the_script_asks_for_a_region_before_detecting_a_shared_photo(self):
+    def test_the_script_detects_a_shared_photo_without_asking_for_a_region(self):
         source = (WEB / "static/js/review.js").read_text()
 
-        assert "Draw a region first" in source
-        assert "server.other_groups_on_photo > 0 && model.region === null" in source
+        assert "Draw a region first" not in source
+        assert "other_groups_on_photo" not in source
 
     def test_the_state_carries_the_count_of_other_groups_on_the_photo(self, client, conn, settings):
         from tests.integration.test_group_plot import make_world
@@ -639,9 +643,11 @@ class TestAddGroupFormInARealBrowser:
         with page.expect_navigation():
             page.click(f'.js-use-existing[data-group-id="{bare.id}"]')
 
-        assert f"/groups/{bare.id}/review" in page.url
+        # A photo is always followed by its reference step (its scale is shown there to keep).
+        assert f"/photos/{first.photo.id}/reference?group_id={bare.id}" in page.url
         assert f"return_to=%2Frifles%2F{rifle.id}" in page.url
-        assert problems == []
+        # The seeded photo has a row but no stored original, so only its preview image fails (409).
+        assert [p for p in problems if "status of 409" not in p] == []
 
 
 @pytest.mark.e2e
@@ -721,8 +727,8 @@ class TestGroupContextCardInARealBrowser:
 
 @pytest.mark.e2e
 @pytest.mark.skipif(not _playwright_ready(), reason="Playwright browsers are not installed")
-class TestReviewDrawRegionFirstInARealBrowser:
-    def test_a_shared_photo_without_a_region_waits_for_the_user_instead_of_detecting(self, live):
+class TestReviewSharedPhotoDetectsInARealBrowser:
+    def test_a_shared_photo_detects_once_its_aim_is_confirmed(self, live):
         page, server, conn, settings, problems = live
         from tests.integration.test_group_plot import make_world
 
@@ -747,15 +753,22 @@ class TestReviewDrawRegionFirstInARealBrowser:
 
         page.goto(f"{server}/groups/{second.id}/review")
         page.locator("#editor-svg image").wait_for()
+        page.locator('#editor-wrap[aria-busy="false"]').wait_for()
+        # The aim step detects nothing; confirming the aim runs the one whole-photo detect, even
+        # though another group shares the photo (its holes come off with "Not a bullet hole").
+        assert page.is_visible("#step-aim") and posts == []
+        box = page.locator("#editor-svg").bounding_box()
+        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.locator("#aim-confirm-button:enabled").click()
+        page.locator("#step-shots").wait_for()
+        page.locator("#detect-button:enabled").wait_for()
 
-        assert "Draw a region first" in page.inner_text("#review-notices")
-        assert "Drag a rectangle" in page.inner_text("#editor-hint")
-        assert posts == []
-        page.click("#detect-button")
-        assert posts == [] and "Draw a region first" in page.inner_text("#review-notices")
+        assert len(posts) == 1
+        assert page.locator("#editor-svg circle.shot").count() > 0
+        assert "Draw a region first" not in page.inner_text("#review-notices")
         assert problems == []
 
-    def test_a_group_alone_on_its_photo_still_detects_at_once(self, live):
+    def test_a_group_alone_on_its_photo_detects_once_its_aim_is_confirmed(self, live):
         page, server, conn, settings, problems = live
         from tests.integration.test_group_plot import make_world
 
@@ -771,8 +784,14 @@ class TestReviewDrawRegionFirstInARealBrowser:
 
         page.goto(f"{server}/groups/{seeded.group.id}/review")
         page.locator("#editor-svg image").wait_for()
-        page.locator("#detect-button:enabled").wait_for()
+        page.locator('#editor-wrap[aria-busy="false"]').wait_for()
 
+        # The aim step detects nothing; confirming the aim runs the one detect, no region needed.
+        assert posts == [] and page.locator("#editor-svg circle.shot").count() == 0
+        box = page.locator("#editor-svg").bounding_box()
+        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.click("#aim-confirm-button")
+        page.locator("#detect-button:enabled").wait_for()
         assert len(posts) == 1
         assert "Draw a region first" not in page.inner_text("#review-notices")
         assert problems == []

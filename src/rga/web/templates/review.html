@@ -1,87 +1,95 @@
 {% extends "base.html" %}
 {% block title %}Review shots{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/css/review.css">{% endblock %}
+{% from "leave_dialog.html" import leave_dialog %}
 {% block content %}
-<div id="review-root" data-state="{{ state_json }}" data-group-id="{{ group_id }}">
-  <h1>Review shots</h1>
-  <p id="review-context" class="muted"></p>
-  <div id="review-notices"></div>
+<div id="review-root" class="flow-page" data-state="{{ state_json }}" data-group-id="{{ group_id }}">
+  <div class="page-head">
+    <div>
+      <h1>Review shots</h1>
+      <p id="review-context" class="muted"></p>
+    </div>
+    <ol class="stepper" aria-label="Progress">
+      <li class="done">1. Group details</li>
+      <li class="done">2. Confirm reference</li>
+      <li id="stepper-aim">3. Set aim point</li>
+      <li id="stepper-shots">4. Review shots</li>
+    </ol>
+    {% if return_to %}<a class="button secondary" id="back-link" href="{{ return_to }}" data-leave>Exit</a>{% endif %}
+  </div>
 
-  <div class="row">
-    <div class="grow">
+  <div class="row flow-body">
+    <div class="grow flow-photo">
       <div class="zoom-toolbar" role="group" aria-label="Zoom and pan">
         <button type="button" id="zoom-out-button" class="secondary" aria-label="Zoom out">&minus;</button>
         <button type="button" id="zoom-in-button" class="secondary" aria-label="Zoom in">+</button>
         <button type="button" id="zoom-fit-button" class="secondary">Fit</button>
-        <button type="button" id="zoom-region-button" class="secondary">Zoom to region</button>
         <span id="zoom-level" class="zoom-level muted" aria-live="polite">1.0&times;</span>
       </div>
       <div class="editor-wrap review-editor" id="editor-wrap">
         <svg id="editor-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Target photo with the shots; scroll to zoom, drag empty space to pan"></svg>
       </div>
-      <p class="muted" id="editor-hint"></p>
     </div>
 
-    <aside class="grow card stack" aria-label="Review controls">
-      <div id="reference-change" class="stack" hidden>
-        <div class="actions">
-          <button type="button" id="reference-change-button" class="secondary">Change scale reference</button>
+    <aside class="grow card stack flow-panel" aria-label="Review controls">
+      <div id="review-notices"></div>
+      <section id="step-aim" class="stack" aria-labelledby="step-aim-title" hidden>
+        <h2 id="step-aim-title">Set the aim point</h2>
+        <div class="segmented" id="aim-mode" role="group" aria-label="How to set the aim point" hidden>
+          <button type="button" id="aim-center-toggle" aria-pressed="true">Use the circle's center</button>
+          <button type="button" id="aim-hand-toggle" aria-pressed="false">Mark it by hand</button>
         </div>
-        <p class="muted" id="reference-change-reason"></p>
-        <div id="reference-change-confirm" class="notice danger" role="alertdialog" aria-labelledby="reference-change-text" hidden>
-          <p id="reference-change-text"></p>
-          <div class="actions">
-            <button type="button" id="reference-change-continue" class="danger">Continue</button>
-            <button type="button" id="reference-change-cancel" class="secondary">Cancel</button>
+        <p class="muted" id="aim-help"></p>
+        <div id="aim-status" class="aim-status" aria-live="polite"></div>
+        <div id="reference-change" class="stack" hidden>
+          <p class="muted" id="reference-change-reason"></p>
+          <div id="reference-change-confirm" class="notice danger" role="alertdialog" aria-labelledby="reference-change-text" hidden>
+            <p id="reference-change-text"></p>
+            <div class="actions">
+              <button type="button" id="reference-change-continue" class="danger">Continue</button>
+              <button type="button" id="reference-change-cancel" class="secondary">Cancel</button>
+            </div>
           </div>
         </div>
-      </div>
-      <div>
-        <div id="shot-counter" class="shot-counter" aria-live="polite">0 of 0 shots</div>
-        <div id="spread-line" class="spread-line"></div>
-        <span id="estimated-badge" class="badge warn" hidden>includes estimated shots</span>
-      </div>
-
-      <div class="field">
-        <label for="expected-input">Shots fired (expected)</label>
-        <input id="expected-input" type="number" min="1" max="200" step="1">
-      </div>
-
-      <div class="actions">
-        <button type="button" id="detect-button" class="secondary">Detect holes</button>
-        <button type="button" id="region-button" class="secondary">Set region</button>
-        <button type="button" id="fill-button" class="secondary">Fill shortfall</button>
-      </div>
-      <div class="actions">
-        <button type="button" id="aim-button" class="secondary">Mark aim</button>
-        <button type="button" id="delete-button" class="danger" disabled>Not a bullet hole</button>
-        <button type="button" id="undo-button" class="secondary" aria-keyshortcuts="Meta+Z Control+Z" disabled>Undo</button>
-      </div>
-      <div id="aim-status" class="muted"></div>
-      <div id="aim-suggestion" class="notice info aim-suggestion" aria-live="polite" hidden>
-        <div id="aim-suggestion-text"></div>
-        <div class="actions">
-          <button type="button" id="aim-use-button">Use this aim</button>
-          <button type="button" id="aim-next-button" class="secondary">Next</button>
-          <button type="button" id="aim-manual-button" class="secondary">Place it yourself</button>
+        <div class="step-nav">
+          <button type="button" id="reference-change-button" class="secondary" hidden>Go back</button>
+          <button type="button" id="aim-confirm-button" disabled>Confirm aim point</button>
         </div>
-      </div>
+      </section>
 
-      <div class="actions">
-        <button type="button" id="save-button" class="secondary">Save</button>
-        <button type="button" id="finalize-button" disabled>Finalize</button>
-        {% if return_to %}<a class="button secondary" id="back-link" href="{{ return_to }}">Back</a>{% endif %}
-      </div>
-      <div id="finalize-confirm" class="notice" role="alertdialog" aria-labelledby="finalize-confirm-text" hidden>
-        <p id="finalize-confirm-text">Finalizing locks this group: its shots, aim and shot count can no longer be edited.</p>
-        <div class="actions">
-          <button type="button" id="finalize-confirm-button">Finalize group</button>
-          <button type="button" id="finalize-cancel-button" class="secondary">Cancel</button>
+      <section id="step-shots" class="stack" aria-labelledby="step-shots-title" hidden>
+        <h2 id="step-shots-title">Review the shots</h2>
+        <div class="shots-summary">
+          <div id="shot-counter" class="shot-counter" aria-live="polite">0 of 0 shots</div>
+          <div class="field">
+            <label for="expected-input">Shots fired</label>
+            <input id="expected-input" type="number" min="1" max="200" step="1">
+          </div>
         </div>
-      </div>
-      <p class="muted" id="finalize-reason"></p>
+
+        <div class="tool-row" role="group" aria-label="Fix the shots">
+          <button type="button" id="detect-button" class="secondary">Detect holes</button>
+          <button type="button" id="delete-button" class="danger outline" disabled>Not a bullet hole</button>
+          <button type="button" id="undo-button" class="secondary" aria-keyshortcuts="Meta+Z Control+Z" disabled>Undo</button>
+        </div>
+
+        <p class="muted" id="finalize-reason"></p>
+        <div class="step-nav">
+          <button type="button" id="shots-back-button" class="secondary">Go back</button>
+          <button type="button" id="finalize-button">Done</button>
+        </div>
+        <div id="finalize-confirm" class="notice" role="alertdialog" aria-labelledby="finalize-confirm-text" hidden>
+          <p id="finalize-confirm-text">Saved. Finish this group? Finishing locks it: its shots, aim and shot count can no longer be edited.</p>
+          <div class="actions">
+            <button type="button" id="finalize-confirm-button">Lock and finish</button>
+            <button type="button" id="finalize-cancel-button" class="secondary">Keep editing</button>
+          </div>
+        </div>
+      </section>
+      <p class="muted editor-hint" id="editor-hint"></p>
     </aside>
   </div>
 </div>
 <script type="module" src="/static/js/review.js"></script>
+{% if not is_final %}{{ leave_dialog() }}{% endif %}
 {% endblock %}

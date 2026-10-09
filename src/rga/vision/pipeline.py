@@ -21,7 +21,7 @@ from rga.domain.types import (
     Shot,
     WorkingFrame,
 )
-from rga.vision.detect import detect_holes
+from rga.vision.learned import detect_holes
 from rga.vision.ragged import ResolveResult, resolve_shots
 from rga.vision.reference_circle import (
     circle_from_edge_points,

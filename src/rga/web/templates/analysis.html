@@ -7,6 +7,7 @@
   <section class="card">
     <h2>Aggregate groups</h2>
     <p class="muted">Pick finalized groups of one rifle at one distance. Each group is laid over its own aim point. Zeroing groups whose point of impact is hidden cannot be combined.</p>
+    <div class="notice warn" id="aggregate-zero-notice" role="note"><strong>Same zero only.</strong> An aggregated group is not accurate unless every group in it was shot on the same zero. If the scope was adjusted or the rifle re-zeroed between groups, the combined size and point of impact are wrong.</div>
     <div class="grid-2">
       <div class="field">
         <label for="filter-rifle">Rifle</label>
@@ -17,9 +18,9 @@
         <select id="filter-distance"><option value="">All distances</option></select>
       </div>
     </div>
-    <table>
+    <table data-thumb-table>
       <thead>
-        <tr><th></th><th>Date</th><th>Rifle</th><th>Load</th><th>Lot</th><th class="num">Distance</th><th class="num">Shots</th><th>Purpose</th></tr>
+        <tr><th></th><th>Date</th><th>Rifle</th><th>Load</th><th>Lot</th><th class="num">Distance</th><th class="num">Shots</th><th>Purpose</th><th class="thumb-cell"><span class="visually-hidden">Photo preview</span></th></tr>
       </thead>
       <tbody id="picker-body"></tbody>
     </table>
@@ -29,6 +30,7 @@
 
   <section class="card" id="aggregate-result" hidden>
     <h2>Combined result</h2>
+    <div class="notice warn" id="aggregate-zero-warning" role="alert">This combination is only accurate if every group in it shares the same zero point. Groups shot on a different zero make the combined size and point of impact wrong.</div>
     <div class="stat-grid" id="aggregate-stats"></div>
     <div id="aggregate-badges"></div>
     <div id="aggregate-warnings"></div>

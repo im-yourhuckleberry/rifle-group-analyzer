@@ -1704,6 +1704,9 @@ class TestDataSchemaContract:
         run(repo.load_has_other_lot_groups, world.load_id, world.lot_a)
         run(repo.load_has_other_lot_groups, world.load_id, world.lot_a, earlier_than=group)
         run(repo.set_photo_taken_at, photo.id, "2026-09-30T08:00:00", "+00:00")
+        run(repo.reference_kind_counts)
+        run(repo.delete_unused_photos, [photo.id])
+        run(repo.delete_groups, [group.id])
 
     def test_every_public_function_is_exercised_and_every_statement_passes_explain(
         self, migrated_conn, world

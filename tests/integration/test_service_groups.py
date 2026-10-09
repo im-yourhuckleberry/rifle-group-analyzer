@@ -2501,26 +2501,16 @@ class TestRifleGroupDays:
         assert row.masked is True and row.size is not None and len(row.size) == 4
         assert not any(hasattr(row, name) for name in ("mean_dx_mil", "aim", "stats"))
 
-    def test_the_page_data_and_the_dashboard_use_groups(self, env):
+    def test_the_page_data_uses_groups(self, env):
         for day in range(1, 13):
             new_group(env, shot_date=f"2026-10-{day:02d}")
         new_group(env, shot_date="2026-10-12", shot_time="09:30")
 
         page = rifle_service.rifle_page_data(env.conn, env.rifle.id)
-        board = rifle_service.dashboard(env.conn)
 
         assert [d.shot_date for d in page.days][:2] == ["2026-10-12", "2026-10-11"]
         assert len(page.days[0].rows) == 2 and page.suppressors == []
-        assert len(board.recent_groups) == rifle_service.RECENT_GROUPS == 10
-        first = board.recent_groups[0]
-        assert (first.group.shot_date, first.group.shot_time) == ("2026-10-12", "09:30:00")
-        assert (first.rifle_name, first.load_label, first.lot_code) == (
-            env.rifle.name,
-            env.load.label,
-            "LOT-1",
-        )
-        assert [r.group.shot_date for r in board.recent_groups][1] == "2026-10-12"
-        assert not hasattr(board, "recent_sessions") and not hasattr(page, "sessions")
+        assert not hasattr(page, "sessions")
 
 
 class TestAnalysisUsesGroupContext:
